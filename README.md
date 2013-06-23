@@ -94,7 +94,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
     //Without comments
     bakedGoods.get({
 		data: ["key1", "key2"],
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		options: optionsObj,
 		complete: function(totalProcessedItemCount, resultDataObj, byStorageTypeErrorObj){}
 	});
@@ -105,7 +105,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		data: ["key1", "key2"],
 		
 		//Array specifying facilities items are located in
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		
 		//We're retrieving the data items persisted in the set() example, use same optionsObj
 		options: optionsObj,
@@ -126,7 +126,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
     //Without comments
     bakedGoods.remove({
 		data: ["key1", "key2"],
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		options: optionsObj,
 		complete: function(byStorageTypeRemovedItemKeysObj, byStorageTypeErrorObj){}
 	});
@@ -137,7 +137,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		data: ["key1", "key2"],
 		
 		//Array specifying facilities items are located in
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		
 		//We're removing the data items persisted in the set() example, use same optionsObj
 		options: optionsObj,
@@ -154,7 +154,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
 
     //Without comments
     bakedGoods.getAll({
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		options: optionsObj,
 		complete: function(byStorageTypeResultDataObj, byStorageTypeErrorObj){}
 	});
@@ -163,7 +163,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
 	bakedGoods.getAll({
 		
 		//Array specifying facilities items are located in
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		
 		//We're removing the data items persisted in the set() example, use same optionsObj
 		options: optionsObj,
@@ -180,7 +180,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
 
     //Without comments
     bakedGoods.removeAll({
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		options: optionsObj,
 		complete: function(byStorageTypeResultDataObj, byStorageTypeErrorObj){}
 	});
@@ -189,7 +189,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
     bakedGoods.removeAll({
 	
 		//Array specifying facilities items are located in
-		storageTypes: ["silverlight, "fileSystem"],
+		storageTypes: ["silverlight", "fileSystem"],
 		
 		//We're retrieving the data items persisted in the set() example, use same optionsObj
 		options: optionsObj,
@@ -397,7 +397,7 @@ This interface uniformity, however, introduces a few differences in the data you
     //Without comments
     bakedGoods.set({
 		data: [{value: {lastName: "Obama", firstName: "Barack"}}, {value: {lastName: "Biden", firstName: "Joe"}}],
-		storageTypes: [indexedDB, webSQL],
+		storageTypes: ["indexedDB", "webSQL"],
 		options: optionsObj
 		//...
 	});
@@ -411,7 +411,7 @@ This interface uniformity, however, introduces a few differences in the data you
 		
 		//Assuming conductDisjointly is false, this will attempt to store  
 		//the data in indexedDB, deferring to webSQL if it isn't supported
-		storageTypes: [indexedDB, webSQL],
+		storageTypes: ["indexedDB", "webSQL"],
 		
 		options: optionsObj
 		
