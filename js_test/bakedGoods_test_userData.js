@@ -1,3 +1,11 @@
+/*
+ * The test runners in this file should be executed independant of one another (in other words, 
+ * only one runner should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+
 /**
 * Loads and performs a storage operation on a userData store.
 
@@ -406,7 +414,6 @@ else if(canEnableUserDataBehavior(optionsObj.locusElement))
 })(198)
 */
 
-
 /*
 //userData_get test runner
 (function(testCount){
@@ -503,7 +510,7 @@ else if(canEnableUserDataBehavior(optionsObj.locusElement))
 
 
 /*
-//userData_getAll testRunner
+//userData_getAll test runner
 (function(testCount){
 
     var locusElement = optionsObj.locusElement;
@@ -566,7 +573,7 @@ else if(canEnableUserDataBehavior(optionsObj.locusElement))
 
 
 
-//userData_removeAll testRunner
+//userData_removeAll test runner
 (function(testCount){
 
     var locusElement = optionsObj.locusElement;

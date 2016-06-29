@@ -1,3 +1,11 @@
+/*
+ * The test runners in this file should be executed independant of one another (in other words, 
+ * only one runner should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+
 /**
 * Creates an object consisting of data items each describing
 * a time instant or a relationship between two time instants.
@@ -153,6 +161,20 @@ function cookie_get(dataArray, optionsObj, complete)
 
 
 /**
+* Performs a cookie remove operation on each item in the store keyed in a given collection.
+
+* @param dataArray				an Array of Strings, each of the name of a to-be-removed cookie
+* @param optionsObj				an Object containing auxiliary data pertinent to the to-be-conducted operation
+* @param complete				a function capable of progressing the execution of the set of related storage operations this operation belongs to
+*/
+function cookie_remove(dataArray, optionsObj, complete)
+{
+	return cookie_set(dataArray, optionsObj, complete, true);
+}
+
+
+
+/**
 * Retrieves the names and values of all the cookies accessible from the current origin.
 
 * @param optionsObj				an Object containing auxiliary data pertinent to the to-be-conducted operation
@@ -205,7 +227,7 @@ function cookie_getAll(optionsObj, complete, isRemovalSuboperation)
 */
 function cookie_removeAll(optionsObj, complete)
 {
-    var allCookieDataObjArray;
+    var allCookieKeyArray;
     var removeExpirationData = optionsObj.removeExpirationData;
 
    /**
@@ -234,42 +256,43 @@ function cookie_removeAll(optionsObj, complete)
                 //the key contained in each on to removedDataItemKeyArray 
                 var removedDataItemKeyArray = [];
                 for(; indexer < processedItemCount; indexer++)
-                        removedDataItemKeyArray.push(allCookieDataObjArray[indexer].key);
+                    removedDataItemKeyArray.push(allCookieKeyArray[indexer]);
                 /////
+                
                 complete(processedItemCount, removedDataItemKeyArray);
             }
             else
-                complete(processedItemCount);
+                    complete(processedItemCount);
         }
 
         return removeAllComplete;
     }
 
-/**
-    * Creates a function capable of funnelling the data resulting from a cookie getAll() 
-    * operation in to a set operation which removes the represented data from the store. 
+   /**
+        * Creates a function capable of funnelling the data resulting from a cookie getAll() 
+        * operation in to a set operation which removes the represented data from the store. 
 
-    * @return       a function capable of funneling the data resulting from a
+        * @return   a function capable of funneling the data resulting from a
                     cookie getAll() operation in to a cookie remove() operation
-    */
-    function createGetAllCompleteWrapper()
-    {
-        /**
-        * Progresses the execution of the set of constituent sub-operations in this storage operation.
-
-        * @param processedItemCount         an integer denoting the number of items in {@code keyValuePairObjArray}
-        * @param keyValuePairObjArray       an Array of objects each containing the key and value of a persisted cookie
         */
-        function getAllComplete(processedItemCount, keyValuePairObjArray)
+        function createGetAllCompleteWrapper()
         {
-            allCookieDataObjArray = keyValuePairObjArray;
-            cookie_set(keyValuePairObjArray, optionsObj, createRemoveAllCompleteWrapper(), true);
+           /**
+            * Progresses the execution of the set of constituent sub-operations in this storage operation.
+
+            * @param processedItemCount     an integer denoting the number of items identified in {@code keyArray}
+            * @param keyArray               an Array containing the key of each persisted cookie
+            */
+            function getAllComplete(processedItemCount, keyArray)
+            {
+                allCookieKeyArray = keyArray;
+                cookie_set(keyArray, optionsObj, createRemoveAllCompleteWrapper(), true);
+            }
+
+            return getAllComplete;
         }
 
-        return getAllComplete;
-    }
-
-    cookie_getAll(optionsObj, createGetAllCompleteWrapper(), true);
+        cookie_getAll(optionsObj, createGetAllCompleteWrapper(), true);
 }
 
 
@@ -427,18 +450,17 @@ var objCount = objArray.length;
                                 cookie_removeAll(optionsObj, function(){});
                         }
 
-                        cookie_set([currentKey], optionsObj, completeFunc, true);
+                        cookie_remove([currentKey], optionsObj, completeFunc);
                 }
 
                 QUnit.test("cookie_remove", testFunc);
         }
 })(100)
-
 */
 
 
 /*
- var optionsObj = {path: null, domain: null, isSecure: false}; 
+var optionsObj = {path: null, domain: null, isSecure: false}; 
 cookie_removeAll(optionsObj, function(){});
 
 //cookie_getAll test runner

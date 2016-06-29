@@ -30,7 +30,7 @@ bakedGoods = function(){
 	var defaultStorageTypeExpirationDataPrimedOptionsObj = {
 		webSQL: {
 			tableData: {name: expirationDataRepositoryName, keyColumnName: "key", columnDefinitions: "(key TEXT PRIMARY KEY, expirationTimeMillis INTEGER)"},
-			tableIndexDataArray:[{name: "Expiration_Data_By_Time", columnNames: "expirationTimeMillis"}]
+			tableIndexDataArray:[{name: "Expiration_Data_By_Time", columnNames: "(expirationTimeMillis)"}]
 		}, 
 		indexedDB:{
 			objectStoreData: {name: expirationDataRepositoryName, keyPath: "key", autoIncrement: false},
@@ -58,8 +58,11 @@ bakedGoods = function(){
 			databaseDisplayName: "Baked Goods",
 			databaseVersion: "",
 			estimatedDatabaseSize: 1024 * 1024,
-			tableData: {name: "Main", keyColumnName: "key", columnDefinitions: "(key TEXT PRIMARY KEY, value TEXT)"}, 
-			tableIndexDataArray: []
+			tableData: {name: "Main", columnDefinitions: "(key TEXT PRIMARY KEY, value TEXT)", keyColumnName: "key"}, 
+			tableIndexDataArray: [],
+			
+			//Set operation pertinent options
+			setOnlyIfAbsent: false
 		},
 		indexedDB: {
 			databaseName: "Baked_Goods",
@@ -95,7 +98,7 @@ bakedGoods = function(){
 			/////
 		},
 		flash:{
-			swfPath: "ext_apps/BakedGoods.swf",
+			swfPath: "ext_bin/BakedGoods.swf",
 
 			lsoName: "Baked_Goods",
 			lsoPath: null,
@@ -107,10 +110,10 @@ bakedGoods = function(){
 			allowScriptAccess: "sameDomain"
 		},
 		silverlight: {
-			xapPath: "ext_apps/bakedGoods.xap",
+			xapPath: "ext_bin/BakedGoods.xap",
 
 			storeScope: "application",
-			conduitClass: "IsolatedStorageSettings",
+			conduitClass: "IsolatedStorageFile",
 
 			directoryPath: "/",
 
@@ -167,7 +170,7 @@ bakedGoods = function(){
 	* @param recipientObj		the object that will receive the properties processed by this operation
 	* @param donorObjArray		an array of Objects each containing the properties to be copied to {@code recipientObj}
 	* @param copyOnlyIfAbsent	a boolean denoting whether the properties of the objects in {@code donorObjArray} 
-															with key components already present in {@code recipientObj} should be copied
+					with key components that appear in respectively preceding objects should be copied
 	*/
 	function copyObjectProperties(recipientObj, donorObjArray, copyOnlyIfAbsent)
 	{
@@ -183,6 +186,24 @@ bakedGoods = function(){
 			}
 		}
 	}
+        
+        
+        
+        /**
+         * Creates an object which consists of the properties of one or more objects.
+         
+         * @param donorObjArray         an array of Objects each containing the properties to be copied to {@code recipientObj}
+         * @param copyOnlyIfAbsent      a boolean denoting whether the properties of the objects in {@code donorObjArray} 
+					with key components that appear in respectively preceding objects should be copied										
+         * @return                      an object which consists of the properties of the objects in {@code donorObjArray}
+         */
+        function aggregateObjectProperties(donorObjArray, copyOnlyIfAbsent)
+        {
+            var recipientObj = {};
+            copyObjectProperties(recipientObj, donorObjArray, copyOnlyIfAbsent);
+            
+            return recipientObj;
+        }
 	
 	
 	
@@ -212,6 +233,19 @@ bakedGoods = function(){
 
 		return operationOptionsObj;
 	}
+        
+        
+        
+        /**
+         * Procures a string denoting the family of storage facilities to which a given storage facility belongs.
+         
+         * @param storageType               a String denoting a type of storage facility
+         * @return                          a String denoting the family of storage types to which {@code storageType} belongs
+         */
+         function procureStorageMetatype(storageType)
+         {
+             return (storageType === "globalStorage" || storageType === "sessionStorage" || storageType === "localStorage" ? "webStorage" : storageType);
+         }
 	
 	
 	
@@ -228,20 +262,23 @@ bakedGoods = function(){
 	*/
 	function procureStorageTypeOptions(storageType, specifiedOptionsObj)
 	{
-		var isSupportedStorageType = defaultStorageTypeOptionsObj.hasOwnProperty(storageType);
+            var optionsObj;
+            var defaultOptionsObj = defaultStorageTypeOptionsObj[storageType];
 
-		var optionsObj;
-		if(isSupportedStorageType && specifiedOptionsObj)
-		{
-			optionsObj = specifiedOptionsObj;
-			copyObjectProperties(optionsObj, [defaultStorageTypeOptionsObj[storageType]], true);
-		}
-		else if(isSupportedStorageType)
-			optionsObj = defaultStorageTypeOptionsObj[storageType];
-		else
-			optionsObj = specifiedOptionsObj;
+            if(defaultOptionsObj)
+            {
+                if(specifiedOptionsObj)
+                {
+                    optionsObj = specifiedOptionsObj;
+                    copyObjectProperties(optionsObj, [defaultOptionsObj], true);
+                }
+                else
+                    optionsObj = defaultOptionsObj;
+            }
+            else
+                optionsObj = (specifiedOptionsObj || {});
 
-		return optionsObj;
+            return optionsObj;
 	}
 
 	
@@ -251,12 +288,12 @@ bakedGoods = function(){
 	
 	* @param dataStr		a "_" delimited collection of substrings each
 							consisting of a key and value
-	* @returnq				an object consisting of all the key-value
+	* @return				an object consisting of all the key-value
 							pairs present in {@code dataStr}
 	*/
 	function deserializeDataItemString(dataStr)
 	{
-		var locationDataArray = dataStr.split(".");
+		var locationDataArray = dataStr.split(";");
 		var locationDataObj = {};
 		
 		//Loop through the seralized data item Strings in locationDataArray, tokenizing each
@@ -277,7 +314,34 @@ bakedGoods = function(){
 		return locationDataObj;
 	}
 	
+	
+	
+   /**
+	* Inserts a backslash in front of each backslash in a String; this allows the original 
+	* backslashes in the String to be preserved through interpretation by a Javascript engine
+	* as source code or a part of source code. 
+	
+	* @param str	a String
+	* @return		a version of {@code str} in which all backslashes are escaped
+	*/
+	function escapeBackslashes(str)
+	{
+		return str.replace("\\", "\\\\");
+	}
+	
 
+        /**
+         * Determines if a given object is a String.
+         
+         * @param obj       an object
+         * @return          true if {@code obj} is a String literal or String object, false otherwise
+         */
+        function isString(obj)
+        {
+            //Though this method of type determination is String-based, and thus, slower than its reference
+            //-based alternatives, it is it is more robust and widely supported than said alternatives
+            return (Object.prototype.toString.call(obj) === "[object String]");     
+        }
 	
 	/***************************Cookie storage operation functions********************************/
 	
@@ -294,7 +358,7 @@ bakedGoods = function(){
 	function cookie_serializeLocationData(optionsObj)
 	{
 		return 	"domain:" 	+ encodeExpirationDataItemComponent(optionsObj.domain)
-				+ ".path:" 	+ encodeExpirationDataItemComponent(optionsObj.path);
+				+ ";path:" 	+ encodeExpirationDataItemComponent(optionsObj.path);
 	}
 	
 	
@@ -454,6 +518,20 @@ bakedGoods = function(){
 
 
    /**
+	* Performs a cookie remove operation on each item in the store keyed in a given collection.
+
+	* @param dataArray				an Array of Strings, each of the name of a to-be-removed cookie
+	* @param optionsObj				an Object containing auxiliary data pertinent to the to-be-conducted operation
+	* @param complete				a function capable of progressing the execution of the set of related storage operations this operation belongs to
+	*/
+	function cookie_remove(dataArray, optionsObj, complete)
+	{
+		return cookie_set(dataArray, optionsObj, complete, true);
+	}
+	
+	
+	
+   /**
 	* Retrieves the names and values of all the cookies accessible from the current origin.
 
 	* @param optionsObj					an Object containing auxiliary data pertinent to the to-be-conducted operation
@@ -506,7 +584,7 @@ bakedGoods = function(){
 	*/
 	function cookie_removeAll(optionsObj, complete)
 	{
-		var allCookieDataObjArray;
+		var allCookieKeyArray;
 		var removeExpirationData = optionsObj.removeExpirationData;
 
 	   /**
@@ -535,7 +613,7 @@ bakedGoods = function(){
 					//the key contained in each on to removedDataItemKeyArray 
 					var removedDataItemKeyArray = [];
 					for(; indexer < processedItemCount; indexer++)
-							removedDataItemKeyArray.push(allCookieDataObjArray[indexer].key);
+							removedDataItemKeyArray.push(allCookieKeyArray[indexer]);
 					/////
 					complete(processedItemCount, removedDataItemKeyArray);
 				}
@@ -558,13 +636,13 @@ bakedGoods = function(){
 		   /**
 			* Progresses the execution of the set of constituent sub-operations in this storage operation.
 
-			* @param processedItemCount			an integer denoting the number of items in {@code keyValuePairObjArray}
-			* @param keyValuePairObjArray		an Array of objects each containing the key and value of a persisted cookie
+			* @param processedItemCount			an integer denoting the number of items identified in {@code keyArray}
+			* @param keyArray                               an Array containing the key of each persisted cookie
 			*/
-			function getAllComplete(processedItemCount, keyValuePairObjArray)
+			function getAllComplete(processedItemCount, keyArray)
 			{
-				allCookieDataObjArray = keyValuePairObjArray;
-				cookie_set(keyValuePairObjArray, optionsObj, createRemoveAllCompleteWrapper(), true);
+				allCookieKeyArray = keyArray;
+				cookie_set(keyArray, optionsObj, createRemoveAllCompleteWrapper(), true);
 			}
 
 			return getAllComplete;
@@ -894,7 +972,7 @@ bakedGoods = function(){
 	*/
 	function webStorage_serializeLocationData(optionsObj)
 	{
-		return (optionsObj.hasOwnProperty("domain") ? "domain:" + encodeExpirationDataItemComponent(locationDataStr) : "");
+		return (optionsObj.hasOwnProperty("domain") ? "domain:" + encodeExpirationDataItemComponent(optionsObj.domain) : "");
 	}
 	
 
@@ -994,12 +1072,12 @@ bakedGoods = function(){
 	* Performs a web storage get operation on each item in the store keyed in a given collection.
 
 	* @param storageType			a String of the name of the desired web storage facility
-	* @param dataArray				an Array of Strings each denoting the name of an item persisted in the web Storage store
+	* @param keyArray				an Array of Strings each denoting the name of an item persisted in the web Storage store
 	* @param optionsObj				an Object containing auxiliary data pertinent to the to-be-conducted operation
 	* @param complete				a function capable of progressing the execution of the set 
 									of related storage operations this operation belongs to	
 	*/
-	function webStorage_get(storageType, dataArray, optionsObj, complete)
+	function webStorage_get(storageType, keyArray, optionsObj, complete)
 	{				
 		var keyValuePairsObj = {};
 		var i = 0;
@@ -1193,8 +1271,8 @@ bakedGoods = function(){
 	function webSQL_serializeLocationData(optionsObj)
 	{
 		return "databaseName:" 		+ encodeExpirationDataItemComponent(optionsObj.databaseName) 
-				+ ".tableName:" 	+ encodeExpirationDataItemComponent(optionsObj.tableData.name)
-				+ ".keyColumnName:" + encodeExpirationDataItemComponent(optionsObj.tableData.keyColumnName);
+				+ ";tableName:" 	+ encodeExpirationDataItemComponent(optionsObj.tableData.name)
+				+ ";keyColumnName:" + encodeExpirationDataItemComponent(optionsObj.tableData.keyColumnName);
 	}
 	
 	
@@ -1301,8 +1379,8 @@ bakedGoods = function(){
 		*/
 		function createIndex()
 		{
-			var currentIndexDataObj = optionsObj.tableIndexDataArray[i];
-			var createIndexStatement = "CREATE INDEX IF NOT EXISTS " + currentIndexDataObj.name + " ON " + optionsObj.tableData.name + " " + currentIndexDataObj.columnNames;
+			var currentIndexDataObj = optionsObj.tableIndexDataArray[i]; 
+                        var createIndexStatement = "CREATE INDEX IF NOT EXISTS " + currentIndexDataObj.name + " ON " + optionsObj.tableData.name + " " + currentIndexDataObj.columnNames;
 
 			transaction.executeSql(createIndexStatement, [], advance);
 		}
@@ -1332,7 +1410,7 @@ bakedGoods = function(){
 		*/
 		function advance(transaction, sqlResultSet)
 		{
-			if(optionsObj.tableIndexDataArray.length > 0) 	createIndices(transaction, optionsObj, setFunc); 
+			if(optionsObj.tableIndexDataArray.length > 0) 	webSQL_createIndices(transaction, optionsObj, setFunc); 
 			else 						setFunc(transaction);
 		}
 		
@@ -1352,146 +1430,302 @@ bakedGoods = function(){
 	function webSQL_set(dataArray, optionsObj, complete)
 	{
 		var i = 0;
-		var errorCompleteFunc = createErrorCompleteFunction(complete, [0]);
-		
-	   /**
-		* Creates an object containing members that can be
-		* used in the creation of an SQL INSERT statement. 
+                var errorCompleteFunc = createErrorCompleteFunction(complete, [0]);
 
-		* @param columnDefinitionsStr		a String containing a table's column definitions
-		* @return							an object containing: 
-		*                                       - an array of the column names that appear in {@code columnDefinitionsStr}
-												- a String of markers suitable for use in a prepared INSERT statement targeting the relevant table	
-		*/
-		function createINSERTStatementComponentObject(columnDefinitionsStr)
-		{
-			var columnNamesArray = [];
-			var markersStr = "";
+                //Procure an object comprised by objects which respectively contain the assets that
+                //will be used to create the types of statements used to carry out the set operation
+                var operationAssetsObj = procureSetOperationStatementCreationalAssets();
+                
+                
+                
+                /**
+                * Composes an object comprised of objects which each consist of data items
+                * that can be collectively used to create statements of a distinct type capable
+                * of placing tuples of data in to a given table when executed.
+                
+                * @return       an object comprised of two objects, respectively keyed by the strings "insert" and "update", which 
+                *               each consist of data items that can collectively be used to create statements of the key-denoted type,
+                *               which are capable of placing tuples of data in to {code optionsObj.tableData.name} when executed
+                */
+               function procureSetOperationStatementCreationalAssets()
+               {
+                   var insertStatementCreationalAssetsObj = {
+                       subjectColumnNameArray: [],
+                       subjectColumnNameSequenceStr: "",
+                       subjectColumnValueMarkerSequenceStr: "",
+                   };
 
-			//Omit the enclosing parentheses in columnDefinitionsStr if there are any
-			var isEnclosedInParentheses = /^\(.+\)$/.test(columnDefinitionsStr);
-			if(isEnclosedInParentheses) columnDefinitionsStr = columnDefinitionsStr.substring(1, columnDefinitionsStr.length - 1);
-			/////
+                   var updateStatementCreationalAssetsObj = {
+                       subjectColumnNameArray: [],
+                       assignmentSequenceStr: ""
+                   };
 
-			//Split the column definitions string in to an array of individual column definitions
-			var columnDefinitionStrsArray = columnDefinitionsStr.split(",");
 
-			//Loop through the column definition strings in columnDefinitionStrsArray,
-			//pushing the name of the column specified in each in to columnNamesArray
-			//as well as appending a marker for it in markersStr
-			var columnCount = columnDefinitionStrsArray.length;
-			for(var i = 0; i < columnCount; i++)
-			{
-				var currentColumnDefinitionStr = columnDefinitionStrsArray[i];
-				currentColumnDefinitionStr = currentColumnDefinitionStr.replace(/^\s+/, "");
+                   var tableName = optionsObj.tableData.name;
+                   var tableColumnDefinitionStr = optionsObj.tableData.columnDefinitions;
+                   var tableKeyColumnName = optionsObj.tableData.keyColumnName;
 
-				columnNamesArray.push(currentColumnDefinitionStr.split(/\s+/)[0]);	//Extract the column name (which must be the first token) from the
-				markersStr+= (i === 0 ? "" : ",") + "?";                                    //whitespace delimited definition and push it to columnNamesArray
-			}
-			/////
 
-			return {
-					columnNamesArray: columnNamesArray,
-					markersStr: markersStr
-			}
-		}
-		
-	   /**
-		* Creates an Array-based tuple.
+                   /**
+                    * Updates the members of {@code insertStatemementCreationalAssetsObj} using the name
+                    * of a column, data procured with said name, and invocation-resultant data.
 
-		* @param dataObj		an object containing values each keyed by a column name in {@code columnNamesArray}
-		* @return				an Array consisting of the values keyed in {@code dataObj} in the same 
-								apperance order as that which their keys appear in {@code columnNamesArray}
-		*/
-		function createTuple(dataObj)
-		{
-			var valueArray = [];
+                    * @param columnName        a String denoting the name of a column in {@code tableName}
+                    */
+                   function updateInsertStatementCreationalAssetsWith(columnName)
+                   {
+                       var sequenceTermPrefix = (insertStatementCreationalAssetsObj.subjectColumnNameArray.length === 0 ? "" : ", ");
 
-			//Loop through the column names in columnNamesArray, pushing 
-			//on to valueArray the value each keys in dataObj
-			var columnCount = columnNamesArray.length;
-			for(var i = 0; i < columnCount; i++)
-			{
-				var columnName = columnNamesArray[i];
-				valueArray.push(dataObj[columnName]);
-			}
-			/////
+                       insertStatementCreationalAssetsObj.subjectColumnNameArray.push(columnName);
+                       insertStatementCreationalAssetsObj.subjectColumnNameSequenceStr += (sequenceTermPrefix + columnName);
+                       insertStatementCreationalAssetsObj.subjectColumnValueMarkerSequenceStr += (sequenceTermPrefix + "?");
+                   }
 
-			return valueArray;
-		}
 
-	   /**
-		* Performs an SQL insert operation targeting a table specified
-		* in {@code optionsObj} on every element in {@code dataArray}.
 
-		* @param transaction	the transaction that the operation will be carried out within 
-		*/
-		function set(transaction)
-		{
-			//Create an object containing Strings that will be used to construct this operation's 
-			//statement from the String containing the column definitions of the target table
-			var statementComponentObj = createINSERTStatementComponentObject(optionsObj.tableData.columnDefinitions);
-			var columnNamesArray = statementComponentObj.columnNamesArray;
+                   /**
+                    * Updates the members of {@code updateStatementCreationalAssetsObj} using the name
+                    * of a column, data procured with said name, and invocation-resultant data.
 
-			//Construct the statement which will be used to insert a single tuple (derived from an object in dataArray) in to the target table
-			var dataInsertStatement = "INSERT INTO " + optionsObj.tableData.name + " (" + columnNamesArray.join(",") + ") VALUES (" + statementComponentObj.markersStr + ")";
-			var dataCount = dataArray.length;
+                    * @param columnName        a String denoting the name of a column in {@code tableName}
+                    */
+                   function updateUpdateStatementCreationalAssetsWith(columnName)
+                   {
+                       if(columnName !== tableKeyColumnName)
+                       {
+                           var sequenceTermPrefix = (updateStatementCreationalAssetsObj.subjectColumnNameArray.length === 0 ? "" : ", ");
 
-		   /**
-			* Advances the set operation.
-			*/
-			function advance()
-			{
-				if(++i < dataCount) setDataItem(); 		//process the data item at i (which was just incremented in the 'if' clause)
-				else                complete(i);
-			}
+                           updateStatementCreationalAssetsObj.subjectColumnNameArray.push(columnName);
+                           updateStatementCreationalAssetsObj.assignmentSequenceStr += (sequenceTermPrefix + columnName + " = (?)");
+                       }
+                   }
 
-		   /**
-			* Creates an Array-based tuple.
 
-			* @param dataObj        an object containing values each keyed by a column name in {@code columnNamesArray}
-			* @return		an Array consisting of the values keyed in {@code dataObj} in the same 
-									apperance order as that which their keys appear in {@code columnNamesArray}
-			*/
-			function createTuple(dataObj)
-			{
-				var valueArray = [];
 
-				//Loop through the column names in columnNamesArray, pushing 
-				//on to valueArray the value each keys in dataObj
-				var columnCount = columnNamesArray.length;
-				for(var i = 0; i < columnCount; i++)
-				{
-					var columnName = columnNamesArray[i];
-					valueArray.push(dataObj[columnName]);
-				}
-				/////
+                   /**
+                    * Conducts a series of operations which transition {@code insertStatementCreationalAssetsObj}
+                    * to a state in which it can be utilized to create statements that, when executed, insert rows
+                    * in to {@code tableName}. After refinement, {@code insertStatementCreationalAssetsObj} is to 
+                    * possess exactly two members:
+                    *      - templateStr:                   A prepared INSERT statement capable of being used to insert a 
+                    *                                       data tuple into {@code tableName}
+                    *      - subjectColumnNameArray:        An array consisting of the names of columns of {@code tableName},
+                    *                                       in the order in which the markers which respectively correspond to
+                    *                                       the values of said columns appear in {@code templateStr}
+                    */
+                   function thourouglyRefineInsertStatementCreationalAssetCollection()
+                   {
+                       var parenthesizedColumnNameSequenceStr = "(" + insertStatementCreationalAssetsObj.subjectColumnNameSequenceStr + ")";
+                       var parenthesizedColumnValueMarkerSequenceStr = "(" + insertStatementCreationalAssetsObj.subjectColumnValueMarkerSequenceStr + ")";
 
-				return valueArray;
-			}
+                       insertStatementCreationalAssetsObj.templateStr = "INSERT INTO " + tableName + " " + parenthesizedColumnNameSequenceStr + " VALUES " + parenthesizedColumnValueMarkerSequenceStr;
 
-		   /**
-			* Inserts a tuple derived from a data object from dataArray in to the target table.
-			*/
-			function setDataItem(){transaction.executeSql(dataInsertStatement, createTuple(dataArray[i].value), advance);};
+                       delete insertStatementCreationalAssetsObj.subjectColumnNameSequenceStr;
+                       delete insertStatementCreationalAssetsObj.subjectColumnValueMarkerSequenceStr;
+                   }
 
-			setDataItem();	//start the set operation
-		}
 
-	   /**
-		* Executes a transaction which conducts a set operation.
 
-		* @code database		an object which provides a connection to a database
-		*/
-		function executeSetTransaction(database)
-		{
-			database.transaction(
-				function(transaction){webSQL_createTable(transaction, optionsObj, set, errorCompleteFunc);},	//Will conditionally create the table specified in optionsObj before starting the set operation
-				errorCompleteFunc
-			);
-		}
+                   /**
+                    * Conducts a series of operations which transition {@code updateStatementCreationalAssetsObj}
+                    * to a state in which it can be utilized to create statements that, when executed, update rows
+                    * in {@code tableName}. After refinement, {@code updateStatementCreationalAssetsObj} is to 
+                    * possess exactly two members:
+                    *      - templateStr:                   A prepared UPDATE statement capable of being used to update
+                    *                                       a data tuple in {@code tableName}
+                    *      - subjectColumnNameArray:        An array consisting of the names of columns of {@code tableName},
+                    *                                       in the order in which the markers which respectively correspond to
+                    *                                       the values of said columns appear in {@code templateStr}
+                    */
+                   function thoroughlyRefineUpdateStatementCreationalAssetCollection()
+                   {
+                       if(updateStatementCreationalAssetsObj.subjectColumnNameArray.length > 0)
+                       {
+                           updateStatementCreationalAssetsObj.subjectColumnNameArray.push(tableKeyColumnName);
+                           updateStatementCreationalAssetsObj.templateStr = "UPDATE " + tableName + " SET " + updateStatementCreationalAssetsObj.assignmentSequenceStr + " WHERE " + tableKeyColumnName + " = (?)";
+                       }
+                       else
+                       {
+                           updateStatementCreationalAssetsObj.subjectColumnNameArray = [];
+                           updateStatementCreationalAssetsObj.templateStr = null;
+                       }
 
-		webSQL_executeStorageOperation(optionsObj, executeSetTransaction, errorCompleteFunc);
+                       delete updateStatementCreationalAssetsObj.assignmentSequenceStr;
+                   }
+
+
+
+                   //Omit the enclosing parentheses in columnDefinitionsStr if there are any
+                   var isEnclosedInParentheses = /^\(.+\)$/.test(tableColumnDefinitionStr);
+                   if(isEnclosedInParentheses) tableColumnDefinitionStr = tableColumnDefinitionStr.substring(1, tableColumnDefinitionStr.length - 1);
+                   /////
+
+                   //Split the column definitions string in to an array of individual column definitions
+                   var columnDefinitionStrsArray = tableColumnDefinitionStr.split(",");
+
+                   //Loop through the column definition strings in columnDefinitionStrsArray, using
+                   //the name specified in each to update each collection of creationary assets defined and
+                   //associated by this function with a distinct type of set operation executory statement
+                   var columnCount = columnDefinitionStrsArray.length;
+                   for(var i = 0; i < columnCount; i++)
+                   {
+                       var currentColumnDefinitionStr = columnDefinitionStrsArray[i];
+                       currentColumnDefinitionStr = currentColumnDefinitionStr.replace(/^\s+/, "");
+
+                       var currentColumnName = currentColumnDefinitionStr.split(/\s+/)[0]  //Extract the column name (which must be the first token) from the whitespace delimited definition 
+
+                       updateInsertStatementCreationalAssetsWith(currentColumnName);
+                       updateUpdateStatementCreationalAssetsWith(currentColumnName);
+                   }
+                   /////
+
+                   //Conduct the sequences of operations which respectively transition each collection of
+                   //creationary assets, defined and associated by this function with a distinct type of
+                   //set operation executory statement, to a state in which it can be used for its purpose
+                   thourouglyRefineInsertStatementCreationalAssetCollection();
+                   thoroughlyRefineUpdateStatementCreationalAssetCollection();
+                   /////
+
+                   return {
+                           insert: insertStatementCreationalAssetsObj,
+                           update: updateStatementCreationalAssetsObj
+                   };
+               }
+               
+               
+
+               /**
+                * Performs an SQL insert operation targeting a table specified
+                * in {@code optionsObj} on every element in {@code dataArray}.
+
+                * @param transaction	the transaction that the operation will be carried out within 
+                */
+                function set(transaction)
+                {
+                    var dataCount = dataArray.length;
+
+                    //Store in local variables the data items which will be used to dictate the course of processing
+                    //in the event of the failure of a data item insertion operation subordinate to the set operation
+                    var setOnlyIfAbsent = optionsObj.setOnlyIfAbsent;
+
+                    var CONSTRAINT_ERR_CODE = 6;    //the code of the type of SQLError spawned by an attempt to execute an integrity-constraint-violating statement in a transaction
+                    /////
+
+                    //Store in local variables the data items which will be used to create the executory statements of the operation
+                    var insertColumnNameArray = operationAssetsObj.insert.subjectColumnNameArray;
+                    var insertStatementTemplate = operationAssetsObj.insert.templateStr;
+
+                    var updateColumnNameArray = operationAssetsObj.update.subjectColumnNameArray;
+                    var updateStatementTemplate = operationAssetsObj.update.templateStr;
+                    /////
+
+
+
+                   /**
+                    * Advances the set operation.
+                    */
+                    function advance()
+                    {
+                        if(++i < dataCount) insertDataItem(); 	//process the data item at i (which was just incremented in the 'if' clause)
+                        else                complete(i);
+                    }
+
+
+
+                    /**
+                     * Dictates the course of a set operation in the event of the failure of 
+                     * a data item insertion operation subordinate to the set operation.
+                     * 
+                     * The course dictated depends on the preferences specified for the operation
+                     * and the reason for the failure. If each tuple procured using an element
+                     * in dataArray is to be placed in the target table despite the existence of 
+                     * an identically identified tuple in the table, and if the error spawned by 
+                     * the spurring insertion operation indicates that the operation failed because
+                     * it would, if carried out, violate an integrity constraint, it is optimistically
+                     * assumed that such an integrity constraint is a primary key constraint, and an 
+                     * attempt is made to place the contents of the subject data item of the insertion
+                     * operationin the target table via an update operation instead. Under any other
+                     * circumstances, processing proceeds up the default statement execution error-handling
+                     * chain.
+
+                     * @param transaction       the transaction which the spurring insertion operation was executed in
+                     * @param error             the SQLError spawned by the spurring insertion operation
+                     * @return                  true if processing is to proceed up the default statement 
+                     *                          execution error-handling chain, false otherwise
+                     */
+                    function handleInsertFailure(transaction, error)
+                    {
+                        var doDeferToSuperiorHandler = true;
+                        
+                        if(!setOnlyIfAbsent && error.code === CONSTRAINT_ERR_CODE)
+                        {
+                            updateDataItem();
+                            doDeferToSuperiorHandler = false;
+                        }
+                        
+                        return doDeferToSuperiorHandler;
+                    }
+
+
+
+                   /**
+                    * Creates an Array-based tuple.
+
+                    * @param dataObj        an object containing values each keyed by a column name in {@code columnNamesArray}
+                    * @return               an Array consisting of the values keyed in {@code dataObj} in the same 
+                                            apperance order as that which their keys appear in {@code columnNamesArray}
+                    */
+                    function createTuple(columnNameArray, dataObj)
+                    {
+                        var valueArray = [];
+
+                        //Loop through the column names in columnNamesArray, pushing 
+                        //on to valueArray the value each keys in dataObj
+                        var columnCount = columnNameArray.length;
+                        for(var i = 0; i < columnCount; i++)
+                        {
+                            var columnName = columnNameArray[i];
+                            valueArray.push(dataObj[columnName]);
+                        }
+                        /////
+
+                        return valueArray;
+                    }
+
+
+
+                   /**
+                    * Inserts a tuple derived from a data object in dataArray in to the target table.
+                    */
+                    function insertDataItem(){transaction.executeSql(insertStatementTemplate, createTuple(insertColumnNameArray, dataArray[i].value), advance, handleInsertFailure);};
+
+
+
+                   /**
+                    * Redefines the mutable elements of an existing tuple in the target table as those which said
+                    * elements respectively correspond to in a tuple derived from a data object in dataArray.
+                    */
+                    function updateDataItem(){transaction.executeSql(updateStatementTemplate, createTuple(updateColumnNameArray, dataArray[i].value), advance);};
+
+
+
+                    insertDataItem();	//start the set operation
+                }
+
+               /**
+                * Executes a transaction which conducts a set operation.
+
+                * @param database		an object which provides a connection to a database
+                */
+                function executeSetTransaction(database)
+                {
+                    database.transaction(
+                        function(transaction){webSQL_createTable(transaction, optionsObj, set, errorCompleteFunc);},	//Will conditionally create the table specified in optionsObj before starting the set operation
+                        errorCompleteFunc
+                    );
+                }
+
+                webSQL_executeStorageOperation(optionsObj, executeSetTransaction, errorCompleteFunc);
 	}
 	
 	
@@ -1610,21 +1844,21 @@ bakedGoods = function(){
 		function replaceSubstrings(str, placeholderStr)
 		{
 			var strRegex = /(?:".*?")|(?:'.*?')/g;
-			var displacedStrArray = [];
-			var matchDataObj;
+                        var displacedStrArray = [];
+                        var matchDataObj;
 
-			//Iteratively match strRegex to subsrings of str, placing the  
-			//matches in to displacedStrArray before removing them from str
-			var placeholderStrlength = placeholderStr.length;
-			for( ;(matchDataObj = strRegex.exec(str)) !== null; strRegex.lastIndex = strRegex.index + placeholderStrlength)
-			{
-				var matchedStr = matchDataObj[0];
-				displacedStrArray.push(matchedStr);
-				str = str.substring(0, matchDataObj.index) + placeholderStr + str.substring(matchDataObj.index + matchedStr.length);
-			}
-			/////
+                        //Iteratively match strRegex to subsrings of str, placing the  
+                        //matches in to displacedStrArray before removing them from str
+                        var placeholderStrLength = placeholderStr.length;
+                        for( ;(matchDataObj = strRegex.exec(str)) !== null; strRegex.lastIndex = strRegex.index + placeholderStrLength)
+                        {
+                            var matchedStr = matchDataObj[0];
+                            displacedStrArray.push(matchedStr);
+                            str = str.substring(0, matchDataObj.index) + placeholderStr + str.substring(matchDataObj.index + matchedStr.length);
+                        }
+                        /////
 
-			return {substrArray: displacedStrArray, str: str};
+                        return {substrArray: displacedStrArray, str: str};
 		}
 
 		
@@ -1788,7 +2022,7 @@ bakedGoods = function(){
 	   /**
 		* Replaces binary operators in a Javascript expression String with their SQLite equivalents.
 
-		* @param SQLite		a String representation of a Javascript expression
+		* @param exprStr		a String representation of a Javascript expression
 		* @return			a String identical to {@code expressionStr} with 
 							binary operators that can be recognized in SQLite
 		*/
@@ -1856,71 +2090,66 @@ bakedGoods = function(){
 	function webSQL_getOrRemoveAll(operationKeyWord, exprStr, optionsObj, complete)
 	{
 		var isGet = (operationKeyWord === "SELECT");
-		var targetAllRecords = (exprStr === "true");
-		
-		var i = 0;
-		var dataObjArray = (isGet ? [] : undefined);
-		
-		//Create a function that will be used to advance the set of operations  
-		//that this operation belongs to in the event of its failure
-		var errorComplete = (isGet ? createErrorCompleteFunction(complete, [0, []]) 
-									  : createErrorCompleteFunction(complete, [0]));
+                var targetAllRecords = (exprStr === "true");
 
-	   /**
-		* Performs a conditional SQL select or delete operation using 
-		* {@code whereClauseStr} that targets the table specified in {@code optionsObj}.
+                var i = 0;
+                var dataObjArray = (isGet ? [] : undefined);
+                var errorComplete = (isGet ? createErrorCompleteFunction(complete, [0, []]) 
+                                              : createErrorCompleteFunction(complete, [0]));
 
-		* @param transaction	the transaction that the operation will be carried out within 
-		*/
-		function getOrRemoveAll(transaction)
-		{
-		   /**
-			* Advances the operation.
+               /**
+                * Performs a conditional SQL select or delete operation using 
+                * {@code whereClauseStr} that targets the table specified in {@code optionsObj}.
 
-			* @param transaction        the transaction object that the current operation is being conducted inside
-			* @param sqlResultSet       an object containing the results of the execution of an 
-										SQL statement as well as related auxiliary data
-			*/
-			function advance(transaction, sqlResultSet)
-			{
-				if(isGet)
-				{
-					var rowList = sqlResultSet.rows;
+                * @param transaction	the transaction that the operation will be carried out within 
+                */
+                function getOrRemoveAll(transaction)
+                {
+                   /**
+                    * Advances the operation.
 
-					//Loop through the retrieved rows in rowList, pushing on to dataObjArray objects 
-					//each consisting of a single row item keyed by the string "value"
-					//
-					//(We must return a native array in order to maintain uniformity among
-					//the types of objects returned from this operation across storage types)
-					var resultCount = rowList.length;
-					for(; i < resultCount; i++) dataObjArray.push({value: rowList.item(i)});
-					
-					complete(i, dataObjArray);
-				}
-				else{ i = sqlResultSet.rowsAffected; complete(i); }
+                    * @param transaction        the transaction object that the current operation is being conducted inside
+                    * @param sqlResultSet       an object containing the results of the execution of an 
+                                                SQL statement as well as related auxiliary data
+                    */
+                    function advance(transaction, sqlResultSet)
+                    {
+                        if(isGet)
+                        {
+                            var rowList = sqlResultSet.rows;
 
-				complete(i, dataObjArray);
-			}
+                            //Loop through the retrieved rows in rowList, pushing on to dataObjArray objects 
+                            //each consisting of a single row item keyed by the string "value"
+                            //
+                            //(We must return a native array in order to maintain uniformity among
+                            //the types of objects returned from this operation across storage types)
+                            var resultCount = rowList.length;
+                            for(; i < resultCount; i++) dataObjArray.push({value: rowList.item(i)});
 
-			//Construct the statement which will be used to conditionally retrieve or delete tuples from the target table
-			var targetColumnNames = (isGet ? "*" : "");
-			var operationStatement = operationKeyWord + " " + targetColumnNames + " FROM " + optionsObj.tableData.name + (targetAllRecords  ? "" : " WHERE " + createWhereClauseString(exprStr));
+                            complete(i, dataObjArray);
+                        }
+                        else{ i = sqlResultSet.rowsAffected; complete(i); }
+                    }
 
-			transaction.executeSql(operationStatement, [], advance);	//execute operationStatement
-		}
+                    //Construct the statement which will be used to conditionally retrieve or delete tuples from the target table
+                    var targetColumnNames = (isGet ? "*" : "");
+                    var operationStatement = operationKeyWord + " " + targetColumnNames + " FROM " + optionsObj.tableData.name + (targetAllRecords  ? "" : " WHERE " + webSQL_createWhereClauseString(exprStr));
 
-	   /**
-		* Executes a transaction which conducts a get or remove operation.
+                    transaction.executeSql(operationStatement, [], advance);	//execute operationStatement
+                }
 
-		* @code database		an object which provides a connection to a database
-		*/
-		function executeGetOrRemoveAllTransaction(database)
-		{
-			var transactionType = (isGet ? "readTransaction" : "transaction");
-			database[transactionType](getOrRemoveAll, errorComplete);
-		}
+               /**
+                * Executes a transaction which conducts a get or remove operation.
 
-		webSQL_executeStorageOperation(optionsObj, executeGetOrRemoveAllTransaction, errorComplete);
+                * @param database		an object which provides a connection to a database
+                */
+                function executeGetOrRemoveAllTransaction(database)
+                {
+                    var transactionType = (isGet ? "readTransaction" : "transaction");
+                    database[transactionType](getOrRemoveAll, errorComplete);
+                }
+
+                webSQL_executeStorageOperation(optionsObj, executeGetOrRemoveAllTransaction, errorComplete);
 	}
 
 
@@ -1957,8 +2186,8 @@ bakedGoods = function(){
 	function indexedDB_serializeLocationData(optionsObj)
 	{
 		return  "databaseName:" 		+ encodeExpirationDataItemComponent(optionsObj.databaseName) 
-				+ ".objectStoreName:" 	+ encodeExpirationDataItemComponent(optionsObj.objectStoreData.name) 
-				+ ".keyPath:" 			+ encodeExpirationDataItemComponent(optionsObj.objectStoreData.keyPath);
+				+ ";objectStoreName:" 	+ encodeExpirationDataItemComponent(optionsObj.objectStoreData.name) 
+				+ ";keyPath:" 			+ encodeExpirationDataItemComponent(optionsObj.objectStoreData.keyPath);
 	}
 	
 	
@@ -1966,14 +2195,14 @@ bakedGoods = function(){
    /**
 	* Creates an object consisting of the indexedDB-related location data present in a String.
 	
-	* @param dataStr		a "_" delimited collection of serialized data items which
+	* @param locationDataStr		a "_" delimited collection of serialized data items which
 							describe the a location in the current IDBEnvironment
 	* @return				an object consisting of all the key-value
 							pairs present in {@code dataStr}
 	*/
 	function indexedDB_createLocationDataObj(locationDataStr)
 	{
-		locationDataObj = deserializeDataItemString(locationDataStr);
+		var locationDataObj = deserializeDataItemString(locationDataStr);
 		locationDataObj["objectStoreData"] = {name: locationDataObj.objectStoreName, keyPath: locationDataObj.keyPath};
 		
 		delete locationDataObj.objectStoreName;
@@ -2392,10 +2621,14 @@ bakedGoods = function(){
 			{
 				//Reassign exprStr to the unmatched part of exprStr; this will be a single
 				//side of its represented expression which should yields a value when evaluated
-				exprStr = (matchDataObj.index === 0 ? exprStr.substring(matchDataObj[0].length) 
-																						: exprStr.substring(0, matchDataObj.index));
-				//Evaluate exprStr. If it contains non-global l-values, an exception will be thrown
-				var key = eval(exprStr);
+				exprStr = matchDataObj.index === 0 
+								? exprStr.substring(matchDataObj[0].length)
+								: exprStr.substring(0, matchDataObj.index);
+									
+				//Evaluate exprStr to yield the result of its represented expression (since the arugment of eval is assumed to
+				//be Javascript source code, we escape  the backslashes in exprStr beforehand to transform it in to its source
+				//code representation). If exprStr contains non-global l-values, an exception will be thrown during evaluation
+				var key = eval(escapeBackslashes(exprStr));
 
 				//Determine the type of database structure expected to index to the matched l-value
 				var originType = (keyObjIncompleteEqualityRegex.test(matchDataObj[0]) ? "objectStore" : "index"); 
@@ -2491,11 +2724,11 @@ bakedGoods = function(){
 						var valueObj = cursor.value;
 						/////
 
-						if(eval(exprStr) === true)
-						{
+						if(eval(escapeBackslashes(exprStr)) === true)				//Since the arugment of eval is assumed to be Javascript source code, we escape the backslashes in 
+						{																//exprStr, transforming it in to its source code representation, before feeding it to the function 
 							if(isGet)
 							{
-								var resultObj = (hasKeyPath ? value : {key: keyObj, value: valueObj});
+								var resultObj = (hasKeyPath ? valueObj : {key: keyObj, value: valueObj});
 								dataArray.push(resultObj);
 								++i;
 							}
@@ -2598,7 +2831,7 @@ bakedGoods = function(){
 	function fileSystem_serializeLocationData(optionsObj)
 	{
 		return 	"storageType:" 		+ encodeExpirationDataItemComponent(optionsObj.storageType) 
-				+ ".directoryPath:" + encodeExpirationDataItemComponent(optionsObj.directoryPath);
+				+ ";directoryPath:" + encodeExpirationDataItemComponent(optionsObj.directoryPath);
 	}
 	
 	
@@ -2640,91 +2873,91 @@ bakedGoods = function(){
 	
 	
 	
-   /**
-	* Executes a storage operation in a specific directory inside a given (HTML5) file system.
+        /**
+        * Executes a storage operation in a specific directory inside a given (HTML5) file system.
 
-	* @param optionsObj						an object containing properties which describe the file system and child
-											directory that the to-be-conducted operation is to take place in
-	* @param storageOperationFunc			a function capable of carrying out a storage operation in the 
-											file system and directory specified in {@code optionsObj}
-	* @param accessErrorCompleteFunc		a function to be called if the specified file system or directory cannot be accessed
-	*/
-	function fileSystem_executeStorageOperation(optionsObj, storageOperationFunc, accessErrorCompleteFunc)
-	{
-		//Obtain a handle to the function capable of granting access to file system. If no such 
-		//function exists, invoke accessErrorCompleteFunc before aborting the storage operation
-		var requestFileSystem = (window.requestFileSystem || window.webkitRequestFileSystem);
-		if(!requestFileSystem){ accessErrorCompleteFunc(); return;}	
-		/////
+        * @param optionsObj			an object containing properties which describe the file system and child
+                                                directory that the to-be-conducted operation is to take place in
+        * @param storageOperationFunc		a function capable of carrying out a storage operation in the 
+                                                file system and directory specified in {@code optionsObj}
+        * @param accessErrorCompleteFunc        a function to be called if the specified file system or directory cannot be accessed
+        */
+        function fileSystem_executeStorageOperation(optionsObj, storageOperationFunc, accessErrorCompleteFunc)
+        {
+            //Obtain a handle to the function capable of granting access to file system. If no such 
+            //function exists, invoke accessErrorCompleteFunc before aborting the storage operation
+            var requestFileSystem = (window.requestFileSystem || window.webkitRequestFileSystem);
+            if(!requestFileSystem){ accessErrorCompleteFunc(); return;}	
+            /////
 
-		var quotaManagementObj = window.webkitStorageInfo;
+            var quotaManagementObj = (optionsObj.storageType === Window.PERSISTENT ? navigator.webkitPersistentStorage : navigator.webkitTemporaryStorage);
 
-		var rootDirectoryEntry;
+            var rootDirectoryEntry;
 
-		var directoryPath = optionsObj.directoryPath;
-		var isDirectoryPathToRoot = (directoryPath === "/" || directoryPath === "\\" || directoryPath === null || directoryPath === undefined);
-		
-		var canRealizeDirectoryPath = (isDirectoryPathToRoot ? false : (optionsObj.canRealizeDirectoryPath || false));
-		var realizeDirectoryPathBool = (canRealizeDirectoryPath && optionsObj.realizeDirectoryPath);
+            var directoryPath = optionsObj.directoryPath;
+            var isDirectoryPathToRoot = (directoryPath === "/" || directoryPath === "\\" || directoryPath === null || directoryPath === undefined);
 
-	   /**
-		* Furthers execution after an occurance of an error due to a directory access operation. 
+            var canRealizeDirectoryPath = (isDirectoryPathToRoot ? false : (optionsObj.canRealizeDirectoryPath || false));
+            var realizeDirectoryPathBool = (canRealizeDirectoryPath && optionsObj.realizeDirectoryPath);
 
-		* @param error      an Object representing and denoting the error caused by a directory access operation
-		*/
-		function handleDirectoryAccessError(error)
-		{
-			if((error.name === "NotFoundError" || error.code === error.NOT_FOUND_ERR) && realizeDirectoryPathBool)
-			{
-				//Create an array of the directory names in the data item set's prospective directory path
-				//(first regex rids the directory path of leading and trailing slashes that would otherwise cause
-				//the array resulting from the split to contain empty strings at the beginning or end, respectively)
-				var directoryPathComponentArray = directoryPath.replace(/(?:^\s*(?:\/|\\)+)|(?:(?:\/|\\)+\s*$)/g, "").split(/(?:\/|\\)+/g);
-				
-				//Store the functions capable of executing or aborting the storage operation in an object for easier handling
-				var storageOperationFuncObj = {execute: storageOperationFunc, complete: accessErrorCompleteFunc};
+           /**
+            * Furthers execution after an occurance of an error due to a directory access operation. 
 
-				realizeDirectoryPath(rootDirectoryEntry, directoryPathComponentArray, 0, storageOperationFuncObj);
-			}
-			else
-				accessErrorCompleteFunc();
-		}
+            * @param error      an Object representing and denoting the error caused by a directory access operation
+            */
+            function handleDirectoryAccessError(error)
+            {
+                if((error.name === "NotFoundError" || error.code === error.NOT_FOUND_ERR) && realizeDirectoryPathBool)
+                {
+                    //Create an array of the directory names in the data item set's prospective directory path
+                    //(first regex rids the directory path of leading and trailing slashes that would otherwise cause
+                    //the array resulting from the split to contain empty strings at the beginning or end, respectively)
+                    var directoryPathComponentArray = directoryPath.replace(/(?:^\s*(?:\/|\\)+)|(?:(?:\/|\\)+\s*$)/g, "").split(/(?:\/|\\)+/g);
 
-	   /**
-		* Executes {@code storageOperationFunc} on the directory specified in {@code optionsObj}.
+                    //Store the functions capable of executing or aborting the storage operation in an object for easier handling
+                    var storageOperationFuncObj = {execute: storageOperationFunc, complete: accessErrorCompleteFunc};
 
-		* @param fileSystem		the file system which contains the directory specified in {@code optionsObj}
-		*/
-		function accessDirectory(fileSystem){
-			rootDirectoryEntry = fileSystem.root;
+                    realizeDirectoryPath(rootDirectoryEntry, directoryPathComponentArray, 0, storageOperationFuncObj);
+                }
+                else
+                    accessErrorCompleteFunc();
+            }
 
-			if(!isDirectoryPathToRoot)
-			{
-				var flagsObj = {create: canRealizeDirectoryPath, exclusive: false};
-				rootDirectoryEntry.getDirectory(directoryPath, flagsObj, storageOperationFunc, handleDirectoryAccessError); 
-			}
-			else
-				storageOperationFunc(rootDirectoryEntry);
-		}
+           /**
+            * Executes {@code storageOperationFunc} on the directory specified in {@code optionsObj}.
 
-		//Will be called to request access to the file system specified by {@code optionsObj}
-		var accessFunc = function(quotaByteSize){
-			requestFileSystem(optionsObj.storageType, quotaByteSize, accessDirectory, accessErrorCompleteFunc);
-		};
+            * @param fileSystem		the file system which contains the directory specified in {@code optionsObj}
+            */
+            function accessDirectory(fileSystem){
+                rootDirectoryEntry = fileSystem.root;
 
-		//If we have to request a storage quota before we can request a file system, reassign accessFunc to a
-		//function which requests the quota and calls the original accessFunc upon the success of the request
-		if(quotaManagementObj && optionsObj.storageType === window.PERSISTENT)
-		{
-			var subAccessFunc = accessFunc;
-			accessFunc = function(quotaByteSize){
-				 quotaManagementObj.requestQuota(optionsObj.storageType, quotaByteSize, subAccessFunc, accessErrorCompleteFunc);
-			};
-		}
-		/////
+                if(!isDirectoryPathToRoot)
+                {
+                    var flagsObj = {create: canRealizeDirectoryPath, exclusive: false};
+                    rootDirectoryEntry.getDirectory(directoryPath, flagsObj, storageOperationFunc, handleDirectoryAccessError); 
+                }
+                else
+                    storageOperationFunc(rootDirectoryEntry);
+            }
 
-		accessFunc(optionsObj.size);	
-	}
+            //Will be called to request access to the file system specified by {@code optionsObj}
+            var accessFunc = function(quotaByteSize){
+                requestFileSystem(optionsObj.storageType, quotaByteSize, accessDirectory, accessErrorCompleteFunc);
+            };
+
+            //If we have to request a storage quota before we can request a file system, reassign accessFunc to a
+            //function which requests the quota and calls the original accessFunc upon the success of the request
+            if(quotaManagementObj === navigator.webkitPersistentStorage)
+            {
+                var subAccessFunc = accessFunc;
+                accessFunc = function(quotaByteSize){
+                     quotaManagementObj.requestQuota(quotaByteSize, subAccessFunc, accessErrorCompleteFunc);
+                };
+            }
+            /////
+
+            accessFunc(optionsObj.size);	
+        }
 	
 	
 	
@@ -3586,7 +3819,7 @@ bakedGoods = function(){
 				//update its load status before creating a DOM element which will contain the data defined by the file
 				if(fileStatus === externalFileStatusObj.NOT_LOADED)
 				{
-					fileStatus = externalFileAssocAssetsObj.fileStatus = externalFileStatusObj.LOADING;
+					fileStatus = externalFileAssocAssetsObj.status = externalFileStatusObj.LOADING;
 					externalFileAssocAssetsObj.createDOMElement();
 				}
 				/////
@@ -3635,8 +3868,8 @@ bakedGoods = function(){
 				var valueObj = currentDataItemObj.value; 
 				/////
 
-				if(eval(exprStr) === true)
-				{
+				if(eval(escapeBackslashes(exprStr)) === true)		//Since the arugment of eval is assumed to be Javascript source code, we escape the backslashes in 
+				{														//exprStr, transforming it in to its source code representation, before feeding it to the function
 					var resultEntity = (onlyKeys ? keyObj : currentDataItemObj);
 					resultEntityArray.push(resultEntity);
 				}
@@ -3890,7 +4123,7 @@ bakedGoods = function(){
 	function flash_serializeLocationData(optionsObj)
 	{
 		return 	"lsoName:" 	+ encodeExpirationDataItemComponent(optionsObj.lsoName)
-				+ ".lsoPath:" 	+ encodeExpirationDataItemComponent(optionsObj.lsoPath);
+				+ ";lsoPath:" 	+ encodeExpirationDataItemComponent(optionsObj.lsoPath);
 	}
 
 
@@ -4152,14 +4385,14 @@ bakedGoods = function(){
 	* @return				a specially formatted and delimited String consisting 
 							of the location data contained in {@code optionsObj}
 	*/
-	function flash_serializeLocationData(optionsObj)
+	function silverlight_serializeLocationData(optionsObj)
 	{
 		var conduitClass = optionsObj.conduitClass;
 		var storedViaISF = (conduitClass === "IsolatedStorageFile");
 		
 		return 	"storeScope:" 	+ encodeExpirationDataItemComponent(optionsObj.storeScope)
-				+ ".conduitClass:" 	+ encodeExpirationDataItemComponent(conduitClass)
-				+ (storedViaISF ? ".directoryPath:" + encodeExpirationDataItemComponent.directoryPath: "");
+				+ ";conduitClass:" 	+ encodeExpirationDataItemComponent(conduitClass)
+				+ (storedViaISF ? ";directoryPath:" + encodeExpirationDataItemComponent(optionsObj.directoryPath): "");
 	}
 
 
@@ -4168,8 +4401,8 @@ bakedGoods = function(){
 	 * Procures the name of the managed function designated to carry out a given
 	 * type of storage operation using a given Isolated Storage-related class.
 	  
-	 *  @code storageTypeClass      a String denoting a store representing class related to Isolated Storage
-	 *  @code operationType         a String denoting a storage operation type
+	 *  @param storageTypeClass      a String denoting a store representing class related to Isolated Storage
+	 *  @param operationType         a String denoting a storage operation type
 	 *  @return                     a String of the name of the managed function which 
 	 *                              utilizes {@code storageTypeClass} to carry out an 
 	 *                              operation of type {@code operationType} 
@@ -4396,9 +4629,9 @@ bakedGoods = function(){
 	 * @return          a String capable of representing {@code str} as 
 	 *                  a literal char sequence in a regular expression
 	 */
-	function escapeRegexSpecialChars(str)
+	function createRegexFriendlyVersionOf(str)
 	{
-		return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+		return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\\\$&");
 	}
 	
 	
@@ -4419,7 +4652,7 @@ bakedGoods = function(){
 
 		var encodedExpirationDataItemComponent = "";
 
-		var periodHex = "%" + ".".charCodeAt(0).toString(16);
+		var semicolonHex = "%" + ";".charCodeAt(0).toString(16);
 		var underscoreHex = "%" + "_".charCodeAt(0).toString(16); 
 		var vertBarHex = "%" + "|".charCodeAt(0).toString(16);
 
@@ -4433,7 +4666,7 @@ bakedGoods = function(){
 
 			switch(curChar)
 			{
-				case ".":   encodedExpirationDataItemComponent += periodHex;	break;
+				case ";":   encodedExpirationDataItemComponent += semicolonHex;     break;
 				case "_":   encodedExpirationDataItemComponent += underscoreHex;    break;
 				case "|":   encodedExpirationDataItemComponent += vertBarHex;       break;
 				default:    encodedExpirationDataItemComponent += curChar;          break;
@@ -4461,7 +4694,7 @@ bakedGoods = function(){
 		var expirationDataItemComponent = "";
 		var charBuffer = "";
 
-		var periodHex = "%" + ".".charCodeAt(0).toString(16);
+		var semicolonHex = "%" + ";".charCodeAt(0).toString(16);
 		var underscoreHex = "%" + "_".charCodeAt(0).toString(16);
 		var vertBarHex = "%" + "|".charCodeAt(0).toString(16);
 
@@ -4483,11 +4716,11 @@ bakedGoods = function(){
 				var nestedHexSequenceBeginIndex = undefined;
 				
 				//Process charBuffer as a hex sequence, appending to expirationDataItemComponent  
-				//either its unicode form (if it represents a "." "_" or "|"), or its longest 
+				//either its unicode form (if it represents a ";" "_" or "|"), or its longest 
 				//0-index based substring that isn't a component to a hex sequence
 				switch(charBuffer)
 				{
-					case periodHex:     expirationDataItemComponent += ".";           break;
+					case semicolonHex:  expirationDataItemComponent += ";";           break;
 					case underscoreHex: expirationDataItemComponent += "_";           break;
 					case vertBarHex:    expirationDataItemComponent += "|";           break;
 					default:            
@@ -4525,7 +4758,7 @@ bakedGoods = function(){
 	*                                               in the collections inside the elements of {@code storedItemDataCollectionObjArray}
 	*                                               in the data item-describing elements of the to-be-returned array
 	* @return                                       a homogeouns Array consisting of either Objects or Strings each containing identifying (and optionally 
-													expiration-time denoting) data of an persisted data item described in {@code storedItemDataCollectionObjArray}
+                                                        expiration-time denoting) data of a persisted data item described in {@code storedItemDataCollectionObjArray}
 	*/ 
 	function createExpirationDataArray(storedItemDataCollectionObjArray, includeExpirationTime)
 	{
@@ -4541,15 +4774,21 @@ bakedGoods = function(){
 			var currentStoredItemDataObjArray = currentItemDataCollectionObj.dataArray;
 
 			//Loop through the objects in currentStoredItemDataObjArray, using each to append to expirationDataArray an object 
-			//(with a type/form implicitly specified by doContainExpirationTime) that may either be a String uniquely identifying 
-			//the item described by the object, or an object consisting of said String  and the time the described item is set to expire
+			//(with a type/form implicitly specified by includeExpirationTime) that may either be a String uniquely identifying 
+			//the item described by the object, or an object which contains an object, keyed by the string "value", consisting of 
+                        //the aforementioned item-identifying string and the time the described item is set to expire
 			var currentItemCount = currentStoredItemDataObjArray.length;
 			for(var j = 0; j < currentItemCount; j++)
 			{
 				var currentDataObj = currentStoredItemDataObjArray[j];
-				var keyStorageTypeLocationDataStr = currentDataObj.key + "_" + currentStorageType + "_" + currentDataObj.locationDataStr;
-				expirationDataArray.push((includeExpirationTime ? {key: keyStorageTypeLocationDataStr, expirationTimeMillis: currentDataObj.expirationTimeMillis}
-																  : keyStorageTypeLocationDataStr));		
+				var keyStorageTypeLocationDataStr = currentDataObj.key + "_" + currentStorageType + "_" + currentDataObj.serializedLocationData;
+                                
+                                var expirationData = 
+                                        includeExpirationTime
+                                        ? {value: {key: keyStorageTypeLocationDataStr, expirationTimeMillis: currentDataObj.expirationTimeMillis}}
+                                        : keyStorageTypeLocationDataStr;
+                                        
+				expirationDataArray.push(expirationData);		
 			}
 			/////
 		}
@@ -4571,8 +4810,20 @@ bakedGoods = function(){
 	*/
 	function setExpirationDataBlob(storageType, expirationDataBlob, complete)
 	{
-		var expirationDataKeyValueObj = {key: expirationDataRepositoryName, value: expirationDataBlob};
-		set({data:[expirationDataKeyValueObj], storageTypes: [storageType], options: defaultStorageTypeExpirationDataPrimedOptionsObj, complete: complete});
+		var dataArray = [{key: expirationDataRepositoryName, value: expirationDataBlob}];
+                
+                var optionsObj = {};
+                var storageTypeOptionsObj = (defaultStorageTypeExpirationDataPrimedOptionsObj[storageType] || defaultStorageTypeOptionsObj[storageType]);
+ 
+                //Establish a mapping between storageType and a copy of storageTypeOptionsObj, in optionsObj, so
+                //that any modifications to be made to the nested object won't modify storageTypeOptionsObj itself 
+                optionsObj[storageType] = {};
+                copyObjectProperties(optionsObj[storageType], [storageTypeOptionsObj] , true);
+                /////
+                
+                var functionsObj = {};
+                
+                conductStorageOperation("set", storageType, {data: dataArray, options: optionsObj, functions: functionsObj}, complete);
 	}
 	
 	
@@ -4600,36 +4851,38 @@ bakedGoods = function(){
 		//Loop through the objects in storedItemDataCollectionObjArray, using Strings constructed
 		//from the storage type and data item-describing objects contained in each along with
 		//expirationDataExistingItemModFunc and expirationDataAbsentItemModFunc to modify expirationDataBlob 
-		var collectionCount = storedItemDataCollectionObjArray.length
+		var collectionCount = storedItemDataCollectionObjArray.length;
 		for(var i = 0; i < collectionCount; i++)
 		{
 			var storedItemDataCollectionObj = storedItemDataCollectionObjArray[i];
 			var storedItemDataArray = storedItemDataCollectionObj.dataArray;
-			var storageType = storedItemDataCollectionObj.storageType;
+			var encodedStorageType = encodeExpirationDataItemComponent(storedItemDataCollectionObj.storageType);
 
 			//Loop through the objects in storedItemDataArray, using the key and expiration time 
-			//contained in each along with storageType and location data to modify expirationBlob
+			//contained in each along with encodedStorageType and location data to modify expirationDataBlob
 			var dataItemCount = storedItemDataArray.length;
 			for(var j = 0; j < dataItemCount; j++)
 			{
 				var currentDataObj = storedItemDataArray[j];
-				var currentKey = encodeExpirationDataItemComponent(currentDataObj.key);
-
-				var keyStorageTypeLocationStr = escapeRegexSpecialChars(currentKey) + "_" + storageType + "_" + escapeRegexSpecialChars(currentDataObj.currentLocationDataStr);
-				var expirationDataItem = (currentDataObj.expirationTimeMillis !== undefined ? keyStorageTypeLocationStr + "_" + currentDataObj.expirationTimeMillis : undefined);	
+				var currentEncodedKey = encodeExpirationDataItemComponent(currentDataObj.key);
+                                var currentEncodedSerializedLocationData = currentDataObj.serializedLocationData;   //the location data in this string was encoded during the construction of the string
+                                
+                                var encodedKeyStorageTypeLocationStr = currentEncodedKey + "_" + encodedStorageType + "_" + currentEncodedSerializedLocationData;
+				var expirationDataItem = (currentDataObj.expirationTimeMillis !== undefined ? encodedKeyStorageTypeLocationStr + "_" + currentDataObj.expirationTimeMillis : undefined);	
 
 				//Search for the expiration data item keyed by keyStorageTypeLocationStr
-				var expirationDataItemKeyRegex = new RegExp("(?:^|\\|)" + keyStorageTypeLocationStr + "_\\d+(?:$|\\|)");
+				var expirationDataItemKeyRegex = new RegExp("(?:^|\\|)" + createRegexFriendlyVersionOf(encodedKeyStorageTypeLocationStr) + "_\\d+(?:$|\\|)");
 				var targetSubstrBeginIndex = expirationDataBlob.search(expirationDataItemKeyRegex);
 				/////
 
 				if(targetSubstrBeginIndex !== -1)		//if there is an expiration data item for this key/storage type/location combination
 				{
-					var targetSubstrEndIndexOffset = (expirationDataBlob[targetSubstrBeginIndex] === "|" ? 0 : 1);
-					var targetSubstrEndIndex = expirationDataBlob.indexOf("|", targetSubstrBeginIndex + 1); //"+1" ensures indexOf doesn't match the matched token's first char which may be "|"
-					
-					targetSubstrEndIndex = (targetSubstrEndIndex === -1 ? expirationDataBlob.length : targetSubstrEndIndex + targetSubstrEndIndexOffset);
-					expirationDataBlob = expirationDataExistingItemModFunc(targetSubstrBeginIndex, targetSubstrEndIndex, expirationDataBlob, expirationDataItem);
+                                        targetSubstrBeginIndex += (expirationDataBlob[targetSubstrBeginIndex] === "|" ?  1 : 0);
+                                        
+					var onePastTargetSubstrEndIndex = expirationDataBlob.indexOf("|", targetSubstrBeginIndex);
+					onePastTargetSubstrEndIndex = (onePastTargetSubstrEndIndex === -1 ? expirationDataBlob.length : onePastTargetSubstrEndIndex);
+                                        
+					expirationDataBlob = expirationDataExistingItemModFunc(targetSubstrBeginIndex, onePastTargetSubstrEndIndex, expirationDataBlob, expirationDataItem);
 				}
 				else
 					expirationDataBlob = expirationDataAbsentItemModFunc(expirationDataBlob, expirationDataItem);
@@ -4653,9 +4906,9 @@ bakedGoods = function(){
 														and an object consisting of or identifying the target data of the operation 
 	* @param complete                                   a function to execute upon the conclusion of the to-be-conducted storage operation													
 	*/
-	function conductExpirationDataStorageOperaton(storageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete)
+	function conductExpirationDataStorageOperation(storageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete)
 	{
-		var storageMetatype = (storageType === "localStorage" || storageType === "globalStorage" ? "webStorage" : storageType);
+		var storageMetatype = procureStorageMetatype(storageType);
 		var storageTypeCategory = (storageType === "webSQL" || storageType === "indexedDB" ? "database" : "nonDatabase");
 
 		var operationType = storageTypeCategoryToOperationTypeObj[storageTypeCategory];
@@ -4719,7 +4972,7 @@ bakedGoods = function(){
 		* @return                   a String which consists of the contents of {@code operandStr1} 
 		*                           and {@code operandStr1}, seperated by "|" if the former is non-empty
 		*/
-		function appendStringWithDelimiter(operandStr1, operandStr2)
+		function appendStringWithLeadingDelimiter(operandStr1, operandStr2)
 		{
 			return operandStr1 += (operandStr1 === "" ? "" : "|" ) + operandStr2;	
 		}
@@ -4757,7 +5010,7 @@ bakedGoods = function(){
 				//that which is procured from the objects in storedItemDataCollectionObjArray
 				if(operationResultObj !== undefined)
 					updateSerializedExpirationData(operationResultObj[expirationDataRepositoryName], storedItemDataCollectionObjArray, 
-																	replaceSubstring, appendStringWithDelimiter, addExpirationDataComplete);
+																	replaceSubstring, appendStringWithLeadingDelimiter, addExpirationDataComplete);
 			}
 			else
 			{
@@ -4775,7 +5028,7 @@ bakedGoods = function(){
 			if(i < expirationDataAptStorageTypesArray.length)
 			{
 				currentStorageType = expirationDataAptStorageTypesArray[i];
-				conductExpirationDataStorageOperaton(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
+				conductExpirationDataStorageOperation(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
 			}
 		}
 
@@ -4819,8 +5072,9 @@ bakedGoods = function(){
 		* @return                                   a String identical to {@code str} sans the substring delimited by 
 		*                                           {@code targetSubstrBeginIndex} and {@code onePastTargetSubstrEndIndex}
 		*/
-		function removeSubstring(targetSubstrBeginIndex, onePastTargetSubstrEndIndex, str)
+		function removeSubstringWithTrailingDelimiter(targetSubstrBeginIndex, onePastTargetSubstrEndIndex, str)
 		{
+                        onePastTargetSubstrEndIndex += (onePastTargetSubstrEndIndex < str.length ? 1 : 0);
 			return str.substring(0, targetSubstrBeginIndex) + str.substring(onePastTargetSubstrEndIndex);
 		}
 		
@@ -4855,7 +5109,7 @@ bakedGoods = function(){
 		function complete(processedItemCount, operationResultObj)
 		{
 			var isSuccessful = (arguments.length === 1  || (arguments.length === 2 && !isDOMError(operationResultObj)));
-			var isSuccessfulGet = isSuccessful && (operationResultObj !== undefined) && (operationResultObj[expirationDataRepositoryName] !== null);
+			var isSuccessfulGet = isSuccessful && (operationResultObj !== undefined);
 
 			if(isSuccessfulGet)
 			{
@@ -4867,7 +5121,7 @@ bakedGoods = function(){
 				if(expirationDataContainerEntity)
 				{
 					updateSerializedExpirationData(expirationDataContainerEntity, storedItemDataCollectionObjArray,
-													removeSubstring, reflectString, removeExpirationDataItemComplete);			
+													removeSubstringWithTrailingDelimiter, reflectString, removeExpirationDataItemComplete);			
 				}	
 				else									
 					isSuccessful = isSuccessfulGet = false;
@@ -4889,7 +5143,7 @@ bakedGoods = function(){
 			if(i < localExpirationDataAptStorageTypesArray.length)
 			{
 				currentStorageType = localExpirationDataAptStorageTypesArray[i];
-				conductExpirationDataStorageOperaton(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
+				conductExpirationDataStorageOperation(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
 			}
 		}
 
@@ -4952,9 +5206,9 @@ bakedGoods = function(){
 		* Procures objects each containing the name of a storage facility and a collection of 
 		* Strings keying expired items in that facility from expiration-related metadata.
 
-		* @param expirationDataItemArray        a homogenous Array of Objects each containing consisting of the  key of  a data item, the
-		*                                       storage facility that contains it, subsidiary data pinpointing the location inside the
-		*                                       storage facility the data item is located and (optionally) the time instant the item is set to expire
+		* @param expirationDataItemArray        a homogenous Array of Objects each containing consisting of the  key of  a data item, the storage facility
+		*                                       that contains it, subsidiary data pinpointing the location inside the storage facility the data item
+		*                                       is located in and (optionally) the time instant the item is set to expire
 		* @param fromDatabase                   a boolean denoting whether {@code expirationDataItemArray} 
 												was procured from a database-type storage facility 
 		* @return                               an Array of Objects each consisting of the name of a storage facility appearing in at
@@ -4988,12 +5242,12 @@ bakedGoods = function(){
 					//Extract the key, containing storage facility, and subsidiary location data 
 					//of the data item that is described by currentDataItemIdentifyingStr
 					var dataItemKey = decodeExpirationDataItemComponent(currentKeyComponentArray[0]);										
-					var storageType = currentKeyComponentArray[1];
-					var locationDataStr = decodeExpirationDataItemComponent(currentKeyComponentArray[2]);
+					var storageType = decodeExpirationDataItemComponent(currentKeyComponentArray[1]);
+					var serializedLocationData = decodeExpirationDataItemComponent(currentKeyComponentArray[2]);
 					/////
 
-					//Get the index in expiredItemDataCollectionArray which stores the object containing
-					//the array of Objects each consisting of data describing expired data item in storageType
+					//Get the index in expiredItemDataCollectionArray which stores the object containing the
+					//array of Objects each consisting of data describing an expired data item in storageType
 					var storageTypeIndex = storageTypeToIndexObj[storageType];
 
 					//If such an object hasn't been created, create it
@@ -5004,9 +5258,9 @@ bakedGoods = function(){
 					}
 					/////
 
-					//Push an object containing dataItemKey and locationDataStr on to the array of such data-describing
+					//Push an object containing dataItemKey and serializedLocationData on to the array of such data-describing
 					//objects inside the object in expiredItemDataCollectionArray linked to storageType 
-					expiredItemDataCollectionArray[storageTypeIndex].dataArray.push({key: dataItemKey, locationDataStr: locationDataStr});		
+					expiredItemDataCollectionArray[storageTypeIndex].dataArray.push({key: dataItemKey, serializedLocationData: serializedLocationData});		
 				}
 			}
 			/////
@@ -5022,11 +5276,12 @@ bakedGoods = function(){
 		{
 			var curExpiredItemDataCollectionObj = expiredItemDataCollectionArray[j];
 			var curStorageType = curExpiredItemDataCollectionObj.storageType;
+                        var curStorageMetatype = procureStorageMetatype(curStorageType);
 
 			var curExpiredItemDataObj = curExpiredItemDataCollectionObj.dataArray[k];
 
 			if(!dataItemRemovalArgObj.options[curStorageType]) dataItemRemovalArgObj.options[curStorageType] = {};
-			var locationDataObj = storageOperationFuncObj[curStorageType].createLocationDataObj(curExpiredItemDataObj.locationDataStr);
+			var locationDataObj = storageOperationFuncObj[curStorageMetatype].createLocationDataObj(curExpiredItemDataObj.serializedLocationData);
 			copyObjectProperties(dataItemRemovalArgObj.options[curStorageType],  [locationDataObj]);
 
 			//Conduct a removal operation using the data extracted from curExpiredItemDataObj. dataItemRemovalArgObj had its  
@@ -5050,20 +5305,29 @@ bakedGoods = function(){
 		* Progresses the expired data removal operation upon completion of 
 		* an expiration data retrieval or previous removal sub-operation.
 	   
-		* @param processedItemCount     an int denoting the number of items processed by the invoking sub-operation
-		* @param error                  an Object representing and identifying the error spawned by, 
-		*                               and responsible for the conclusion of, the invoking sub-operation
+		* @param byStorageTypeRemovedItemCountObj       an Object which contains a single key value pair consisting of the sole storage facility
+                *                                               in which the invoking removal sub-operation was conducted and the number of items removed
+                *                                               by the sub-operation
+		* @param byStorageTypeErrorObj                  an Object which contains a singled key-value pair consisting of the sole storage facility
+                *                                               in which the invoking removal sub-operation was conducted and the error (if any) spawned by, 
+		*                                               and responsible for the conclusion of, the sub-operation
 		*/
-		function removeComplete(processedItemCount, error)
+		function removeComplete(byStorageTypeRemovedItemCountObj, byStorageTypeErrorObj)
 		{
 			var canConclude = true;
+                        
+                        //Obtain a handle to the currently processing expired item data collection and use the storage type,
+                        //identified in the data collection, that the collection is associated with, and that the invoking 
+                        //removal sub-operation was conducted in, to obtain the error (if any) spawned by, and responsible
+                        //for the conclusion of, the sub-operation
+                        var expiredItemDataCollectionObj = expiredItemDataCollectionArray[j];
+                        var error = byStorageTypeErrorObj[expiredItemDataCollectionObj.storageType];
+                        /////
 
 			if(!error)
 			{
-				//Obtain handles to the currently processing expired item data collection and expired item data object in it
-				var expiredItemDataCollectionObj = expiredItemDataCollectionArray[j];
+				//Obtain a handle to the currently processing expired item data object
 				var curExpiredItemDataObj = expiredItemDataCollectionObj.dataArray[k];
-				/////
 
 				//If currentExpiredItemDataObj was the first object to be processed in its collection,
 				//create an object in removedItemCollectionArray for the collection, which will contain
@@ -5141,7 +5405,7 @@ bakedGoods = function(){
 			if(i < expirationDataAptStorageTypesArray.length)
 			{
 				currentStorageType = expirationDataAptStorageTypesArray[i];
-				conductExpirationDataStorageOperaton(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, getExpirationDataComplete);
+				conductExpirationDataStorageOperation(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, getExpirationDataComplete);
 			}
 		}
 
@@ -5167,8 +5431,7 @@ bakedGoods = function(){
 	function conductStorageOperation(operationType, storageType, argObj, complete)
 	{
 		//Obtain the meta-type of storageType (if defined), which is the collection of storage types that it belongs to
-		var storageMetatype = (storageType === "globalStorage" || storageType === "sessionStorage" 
-								|| storageType === "localStorage" ? "webStorage" : storageType);
+		var storageMetatype = procureStorageMetatype(storageType);
 
 		//Use the default operation preferences associated with storageType, along with any overriding 
 		//values specified by the user, to get the object of preferences to be used for this storage operation
@@ -5186,17 +5449,28 @@ bakedGoods = function(){
 		//the desired storage operation on the specified storage type
 		if(storageMetatype !== storageType) operationArgArray.push(storageType);
 
-		if(operationType.indexOf("All") === -1) 
-			operationArgArray.push(argObj.data);
-		else if(storageType === "indexedDB" || storageType === "webSQL" || storageType === "flash" || storageType === "silverlight")		//conditional ("getAll", "removeAll") operation
-		{
-			//If argObj.filter has no meaningful value, assign it to "true" which, when evaluated, will
-			//return true for, and allow for the processing of, all data items encountered by the operation
-			if(argObj.filter === undefined || argObj.filter === null || argObj.filter === "") 
-				argObj.filter = "true";
+		if(operationType.indexOf("All") !== -1) 
+                {
+                    //If it is a "removeAll" operation that is to be conducted, the removeExpirationData property of argObj.options, 
+                    //which is a preference indirectly defined for the operation, is inserted in to storageTypeOptionsObj,
+                    //and act which directly defines the preference for the operation, giving the operation access to 
+                    //the preferecnce, which it requires to compose and provide the expected data to the complete callback
+                    if(operationType === "removeAll")
+                        storageTypeOptionsObj.removeExpirationData = argObj.options.removeExpirationData;
+                    /////
+                    
+                    if(storageType === "indexedDB" || storageType === "webSQL" || storageType === "flash" || storageType === "silverlight")     //conditional ("getAll", "removeAll") operation
+                    {
+                            //If argObj.filter has no meaningful value, assign it to "true" which, when evaluated, will
+                            //return true for, and allow for the processing of, all data items encountered by the operation
+                            if(argObj.filter === undefined || argObj.filter === null || argObj.filter === "") 
+                                    argObj.filter = "true";
 
-			operationArgArray.push(argObj.filter);
-		}
+                            operationArgArray.push(argObj.filter);
+                    }
+                }
+                else
+                    operationArgArray.push(argObj.data);
 
 		Array.prototype.push.apply(operationArgArray, [storageTypeOptionsObj, complete]);
 		/////
@@ -5224,15 +5498,16 @@ bakedGoods = function(){
 		//Will be used to sequentially conduct a set operation on each of the storage facilities named in argObj
 		var i = 0;
 
-		//Will contain key-value pairs each consisting of a storage type specified in argObj
-		//and an array of the keys of the data items successfully stored in it by this operation
-		var byStorageTypeStoredKeysObj = [];
+		//Will contain key-value pairs each consisting of a storage facility specified 
+                //in argObj and an object consisting of the bounds of the range of items in
+                //argObj.data successfully stored in the storage type by this operation 
+		var byStorageTypeStoredItemRangeDataObj = {};
 		
-		//Will contain key-value pairs each consisting of a storage type accessed by a 
+		//Will contain key-value pairs each consisting of a storage facility accessed by a 
 		//sub-operation which spawned an error, and the DOMError representation of that error
 		var byStorageTypeErrorObj = {};
 
-		//Will contain objects each consisting of a storage facility specified in argObj and an
+		//Will contain objects each consisting of a storage facility specified in argObj and an 
 		//array containing the expiration-related data of items stored in it by this operation
 		var expirationDataCollectionArray = [];
 
@@ -5240,23 +5515,33 @@ bakedGoods = function(){
 		if(!argObj.options) 		argObj.options = {};
 		if(!argObj.functions) 		argObj.functions = {};
 		/////
+                
+                //Given the capacity that this function has to change argObj.data, argObj is redefined as
+                //shallow copy of itself with a substantive copy of the array (where "substantive" applies 
+                //to the array itself and not necessarily the its contents), a measure which ensures that
+                //the state of the original argObj is not changed
+                var argObjCompositeCopy = aggregateObjectProperties([argObj, {data: argObj.data.slice(0)}], false);
+                argObj = argObjCompositeCopy;
+                /////
 
 		var currentStorageType = argObj.storageTypes[0];
 		var storageTypeCount = argObj.storageTypes.length;
+                
+                var firstUnprocessedItemAbsoluteIndex = 0;
 		var unprocessedItemCount = argObj.data.length;
 
 		var operationOptionsObj = procureOperationOptions("set", argObj.options);
-		var recordExpirationData = operationOptionsObj.recordExpirationData;
-		var conductDisjointly = operationOptionsObj.conductDisjointly;
+		var doRecordExpirationData = operationOptionsObj.recordExpirationData;
+		var doConductDisjointly = operationOptionsObj.conductDisjointly;
 
 	   /**
 		* Procures an object that uniquely identifies the payload data
 		* of an item persisted in a given storage facility.
 
-		* @param dataItemObj               an Object containing the identifying and payload data of a item persisted in {@code storageType}
+		* @param dataItemObj               an Object containing the identifying and payload data of an item persisted in {@code storageType}
 		* @param storageType               a String denoting the type of storage facility that {@code dataItemObj} was persisted in
 		* @param storageTypeOptionsObj     an Object containing the {@code storageType}-related preferences used to store {@code dataItemObj}
-		* @return                          an object which uniquely identifies the payload data of {@code dataItemObj} in {@code storageType}
+		* @return                          an Object which uniquely identifies the payload data of {@code dataItemObj} in {@code storageType}
 		*/
 		function procureDataItemIdentifyingEntity(dataItemObj, storageType, storageTypeOptionsObj)
 		{	
@@ -5305,7 +5590,11 @@ bakedGoods = function(){
 					if(/\bPRIMARY KEY\b/.test(currentColumnDefStr))     //if currentColumnDefStr defines a column that is part of the 
 					{                                                       //primary key of the table described by optionsObj.tableData
 						var currentColumnName = /\w+/.exec(currentColumnDefStr)[0];
-						key += (key === "" ? "" : " && " ) + currentColumnName + " === " + dataItemObj.value[currentColumnName];
+                                                
+                                                var currentColumnValue = dataItemObj.value[currentColumnName];
+                                                currentColumnValue = (isString(currentColumnValue) ? "'" + currentColumnValue + "'" : currentColumnValue);
+                                                
+						key += (key === "" ? "" : " && " ) + currentColumnName + " === " + currentColumnValue;
 					}
 				}
 				/////
@@ -5317,21 +5606,22 @@ bakedGoods = function(){
 		}
 
 	   /**
-		* Creates an object that can be used to record the expiration data of data items with
-		* expiration times stored during the most recently run sub-storage operation.
+		* Creates an object that can be used to record the expiration data of data items with specified
+		* expiration times that were stored during the most recently run sub-storage operation.
 
 		* @param onePastSubsetEnd       an int of one past the index in {@code argObj.dataArray}
 		*                               containing the last object in the desired subset
 		* @return                       an object consisting of the currently relevant storage facility and objects each containing 
 		*                               the data of an expiration time-possessing data item stored in the facility during the most recent  
-										run of this operation along with data that describes where in the facility the item is located
+                                                run of this operation along with data that describes where in the facility the item is located
 		*/
 		function createItemExpirationDataCollection(onePastSubsetEnd)
 		{
 			var storageTypeExprDataObj = null;
 			var toExpireDataItemObjArray = [];
 
-			var locationDataBlob;
+                        var currentStorageMetatype = procureStorageMetatype(currentStorageType);
+			var serializedLocationData;
 
 			//Procure the storage facility-related preferences used in the most recently executed storage operation. 
 			//Contained location data will be serialized for use in the creation of expiration data for the stored items
@@ -5344,18 +5634,18 @@ bakedGoods = function(){
 			for(var i = 0; i < onePastSubsetEnd; i++)
 			{
 				var currentDataObj = dataArray[i];
-				if(currentDataObj.hasOwnProperty("expirationTime"))
+				if(currentDataObj.hasOwnProperty("expirationTimeMillis"))
 				{
 					//Serialize the data which describes where the items stored by this operation
-					//is/will be located within the currently relevant storage facility.
-					if(locationDataBlob === undefined) 
-						locationDataBlob = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+					//are/will be located within the currently relevant storage facility.
+					if(serializedLocationData === undefined) 
+						serializedLocationData = storageOperationFuncObj[currentStorageMetatype].serializeLocationData(storageTypeOptionsObj);
 
 					var key = procureDataItemIdentifyingEntity(currentDataObj, currentStorageType, storageTypeOptionsObj);
 
 					//Push an object on to toExpireDataItemObjArray consisting of data identifying 
 					//the currently processing item, its location, and its expiration time
-					toExpireDataItemObjArray.push({key: key, expirationTime: currentDataObj.expirationTime, locationData: locationDataBlob});
+					toExpireDataItemObjArray.push({key: key, expirationTimeMillis: currentDataObj.expirationTimeMillis, serializedLocationData: serializedLocationData});
 				}
 			}
 			/////
@@ -5374,39 +5664,44 @@ bakedGoods = function(){
 		* @param processedItemCount		an int denoting the number of items in {@code argObj.dataArray} processed by the invoking set operation
 		* @param error                 (optional) the DOMError spawned by the invoking set sub-operation
 		*/
-		function complete(processedItemCount)
+		function complete(processedItemCount, error)
 		{
 			var currentUnprocessedItemCount =  unprocessedItemCount - processedItemCount;
 
 			//Associate the number of items processed by the invoking sub-operation with the storage facility it operated in
-			byStorageTypeStoredKeysObj[currentStorageType] = processedItemCount;
+			byStorageTypeStoredItemRangeDataObj[currentStorageType] = {
+                            storedItemRangeBegin: firstUnprocessedItemAbsoluteIndex,
+                            onePastStoredItemRangeEnd: firstUnprocessedItemAbsoluteIndex + processedItemCount
+                        };
 			
 			//If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
 			if(error) byStorageTypeErrorObj[currentStorageType] = error;
 
 			//If the expiration-related data of the stored items is to be recorded, push an object containing 
 			//such data on to expirationDataCollectionArray, which will be utilized by recordExpirationData when it is called
-			if(recordExpirationData)
+			if(doRecordExpirationData)
 			{
-				var expirationDataCollectionObj = createItemExpirationDataCollection(currentUnprocessedItemCount);
+				var expirationDataCollectionObj = createItemExpirationDataCollection(processedItemCount);
 				if(expirationDataCollectionObj !== null) expirationDataCollectionArray.push(expirationDataCollectionObj);
 			}
 			/////
 
 			var processedAllItemsThisRun = (currentUnprocessedItemCount === 0);
-			var canConclude = ++i >= storageTypeCount || (conductDisjointly ? false : processedAllItemsThisRun); 
+			var canConclude = ++i >= storageTypeCount || (doConductDisjointly ? false : processedAllItemsThisRun); 
 
 			if(canConclude)
 			{
-				if(argObj.complete)         argObj.complete(byStorageTypeStoredKeysObj, byStorageTypeErrorObj);
-				if(recordExpirationData)	recordExpirationData(expirationDataCollectionArray);
+				if(argObj.complete)             argObj.complete(byStorageTypeStoredItemRangeDataObj, byStorageTypeErrorObj);
+				if(doRecordExpirationData)	recordExpirationData(expirationDataCollectionArray);
 			}
 			else
 			{
-				if(!conductDisjointly)
+				if(!doConductDisjointly)
 				{
-					argObj.dataArray.splice(processedItemCount);		//Remove the items stored in this run of the operation from the array of to-be-stored items
-					unprocessedItemCount = currentUnprocessedItemCount;	//Update the number of unprocessed items to that which were not stored by this operation
+					argObj.dataArray.splice(processedItemCount);                //Remove the items stored in this run of the operation from the array of to-be-stored items
+                                        
+                                        firstUnprocessedItemAbsoluteIndex += processedItemCount;    //Update the index at which the first unprocessed item is located in the original argObj.dataArray 
+					unprocessedItemCount = currentUnprocessedItemCount;         //Update the number of unprocessed items to that which were not stored by this operation
 				}
 
 				currentStorageType = argObj.storageTypes[i];
@@ -5447,7 +5742,7 @@ bakedGoods = function(){
 		//on the disjointness of the retrieval operation:
 		// non-disjoint:	mappings each consisting of a key in argObj.data and the value it keys
 		//			in the first storage facility in argObj.storageTypes it appears in
-		// disjoint:	mappings each consisting of a storage type in argObj.storage types and an object containing 
+		// disjoint:	mappings each consisting of a storage type in argObj.storageTypes and an object containing 
 		//			mappings each consisting of a key in argObj.data and the value it keys in the storage type
 		var resultDataObj = {};
 		
@@ -5462,6 +5757,14 @@ bakedGoods = function(){
 		if(!argObj.options) 		argObj.options = {};
 		if(!argObj.functions) 		argObj.functions = {};
 		/////
+                
+                //Given the capacity that this function has to change argObj.data, argObj is redefined as
+                //shallow copy of itself with a substantive copy of the array (where "substantive" applies 
+                //to the array itself and not necessarily the its contents), a measure which ensures that
+                //the state of the original argObj is not changed
+                var argObjCompositeCopy = aggregateObjectProperties([argObj, {data: argObj.data.slice(0)}], false);
+                argObj = argObjCompositeCopy;
+                /////
 
 		var operationOptionsObj = procureOperationOptions("get", argObj.options);
 		var conductDisjointly = operationOptionsObj.conductDisjointly;
@@ -5478,28 +5781,32 @@ bakedGoods = function(){
 
 
 	   /**
-		* Extracts from {@code argObj.data} the keys that were not present in 
-		* the target storage facility of the most recently executed sub-retrieval. 
+                * Creates an array consisting of the elements in a range in argObj.data
+                * that can be expressed as [0,i), where i itself is in the range 
+                * [0, argObj.data.length], which do not key values in a given Object.
 		*
-		* This function cannot discern between keys that are not present in the  
-		* relevant storage facility and those which key null values. Thus, keys  
-		* which fall in to either category will be included in the returned array.
+		* This function cannot discern between keys that are not present in the
+                * argument Object and those which key null values. Thus, keys which
+		* fall in to either category will be included in the returned array.
 
-		* @return		an Array consisting of the keys in {@code argObj.data} that
-		*                   were left unprocessed by, or did not key anything in the target
-		*                   storage facility of, the most recently executed sub-retrieval
+                * @param onePastFocalRangeEnd       an int of one past the index in {@code argObj.data} that   
+                *                                   defines as the end of the focal range of this function 
+                * @param keyValuePairObj            an Object consisting of key-value pairs which may or may not feature
+                *                                   elements in the target range in {@code argObj.data} as keys
+                * @return                           an Array consisting of the elements in the focal range in 
+                *                                   {@code argObj.data} that map to null values in {@code keyValuePairsObj}
 		*/
-		function getAbsentDataKeys(onePastProcessedKeySubsetEnd)
+		function getAbsentDataKeys(onePastFocalRangeEnd, keyValuePairObj)
 		{
 			var absentDataKeysArray = [];
 			var dataArray = argObj.data;
 
-			//Loop through the keys in dataArray processed during the last retrieval operation, 
-			//pushing those on to absentDataKeysArray that don't map to meaningful values
-			for(var i = 0; i < onePastProcessedKeySubsetEnd; i++)
+			//Loop through the keys in the focal range in dataArray, pushing those
+			//on to absentDataKeysArray that don't map to meaningful values
+			for(var i = 0; i < onePastFocalRangeEnd; i++)
 			{
 				var currentKey = dataArray[i];
-				var currentValue = resultDataObj[currentKey];
+				var currentValue = keyValuePairObj[currentKey];
 
 				if(currentValue === null) absentDataKeysArray.push(currentKey);
 			}
@@ -5552,11 +5859,11 @@ bakedGoods = function(){
 		*/
 		function regenerateData()
 		{
-			if(j++ < regenerationArgObjArray.length)
+			if(j < regenerationArgObjArray.length)
 			{
 				regenerationArgObjArray[j].functions = regenerationFunctionsObj;
 				regenerationArgObjArray[j].complete = regenerateData;	//Designate this function to execute after the conclusion of the set operation
-				set(regenerationArgObjArray[j]);
+				set(regenerationArgObjArray[j++]);
 			}
 		}
 
@@ -5576,17 +5883,24 @@ bakedGoods = function(){
 			{
 				//Extract the keys in argObj.dataArray that did not key anything 
 				//in the storage facility that was the target of the invoking sub-retrieval
-				var absentDataKeysArray = getAbsentDataKeys(currentProcessedItemCount);
+				var absentDataKeysArray = getAbsentDataKeys(currentProcessedItemCount, retrievedKeyValuePairsObj);
 
-				//Reassign the operation's key array to an array which contains the keys that
-				//were unprocessed or deemed absent by the invoking sub-retrieval            
-				argObj.data = Array.prototype.splice.apply(argObj.data, [0, currentProcessedItemCount].concat(absentDataKeysArray)); 
+				//Reconstitute the operation's key array as that which contains the keys 
+				//that were unprocessed or deemed absent by the invoking sub-retrieval            
+				Array.prototype.splice.apply(argObj.data, [0, currentProcessedItemCount]); 
+                                Array.prototype.push.apply(argObj.data, absentDataKeysArray);
+                                /////
 
 				//If absent data is to be regenerated, push an object containing relevant data from the invoking 
 				//sub-retrieval on to regenerationArgObjArray that will be used to accomplish this (after further processing) 
 				if(regenerate && absentDataKeysArray.length > 0)
-					regenerationArgObjArray.push({storageTypes: [currentStorageType], data: absentDataKeysArray});
-
+                                {
+                                    var regenerationOptionsObj = {};
+                                    regenerationOptionsObj[currentStorageType] = argObj.options[currentStorageType];
+                                    
+                                    regenerationArgObjArray.push({data: absentDataKeysArray, storageTypes: [currentStorageType], options: regenerationOptionsObj});
+                                }
+					
 				currentKeyValuePairsObj = resultDataObj;
 			}
 			else
@@ -5602,7 +5916,7 @@ bakedGoods = function(){
 
 			if(canConclude)
 			{
-				if(argObj.complete) argObj.complete(totalProcessedItemCount, resultDataObj, byStorageTypeErrorObj);
+				if(argObj.complete) argObj.complete(resultDataObj, byStorageTypeErrorObj);
 
 				if(regenerate)
 				{
@@ -5642,8 +5956,8 @@ bakedGoods = function(){
 		//in each of the storage facilities in argObj.storageTypes
 		var i = 0;
 
-		var byStorageTypeRemovedItemKeysObj = {};
-		var byStorageTypeToErrorObj = {};
+		var byStorageTypeRemovedItemCountObj = {};
+		var byStorageTypeErrorObj = {};
 		var expirationDataCollectionArray = [];
 
 		//Assure argObj has the properties assumed to be present
@@ -5653,7 +5967,6 @@ bakedGoods = function(){
 
 		var storageTypeCount = argObj.storageTypes.length;
 		var currentStorageType = argObj.storageTypes[i];
-		var keyCount = argObj.data.length;
 
 		var storageOperationOptionsObj = procureOperationOptions("remove", argObj.options);
 		var removeExpirationDataBool = storageOperationOptionsObj.removeExpirationData;
@@ -5668,20 +5981,22 @@ bakedGoods = function(){
 		*                               array of objects each containing the key of a data item removed by the most
 		*                               recent removal sub-operation and a string of the item's former location data
 		*/
-		function createExpirationDataObject(onePastSubsetEnd)
+		function createItemIdentificationCentricExpirationDataCollection(onePastSubsetEnd)
 		{
 			var expirationDataObjArray = [];
 			var dataArray = argObj.data;
+                        
+                        var currentStorageMetatype = procureStorageMetatype(currentStorageType);
 
 			//Create a String containing data that describes the location of items in currentStorageType keyed by the Strings in dataArray 
-			var storageTypeOptionsObj = procureStorageTypeOptions(defaultStorageTypeOptionsObj[currentStorageType], argObj.options[currentStorageType]);
-			var locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+			var storageTypeOptionsObj = procureStorageTypeOptions(currentStorageType, argObj.options[currentStorageType]);
+			var serializedLocationData = storageOperationFuncObj[currentStorageMetatype].serializeLocationData(storageTypeOptionsObj);
 			/////
 
-			//Loop through the keys in the sub-array of dataArray bounded by [0, onePastSubsetEnd), pushing
-			//on to expirationDataObjArray an object for each key consisting of it (the key) and locationStr
+			//Loop through the keys in the sub-array of dataArray bounded by [0, onePastSubsetEnd), pushing on to
+			//expirationDataObjArray an object for each key consisting of it (the key) and serializedLocationData
 			for(var i = 0; i < onePastSubsetEnd; i++)
-				expirationDataObjArray.push({key: dataArray[i], locationData: locationDataStr});
+				expirationDataObjArray.push({key: dataArray[i], serializedLocationData: serializedLocationData});
 			/////
 
 			return {storageType: currentStorageType, dataArray: expirationDataObjArray};
@@ -5695,8 +6010,8 @@ bakedGoods = function(){
 		*/
 		function complete(processedItemCount, error)
 		{
-			//Map the currently relevant storage type to the keys of the items removed by the invoking sub-removal
-			byStorageTypeRemovedItemKeysObj[currentStorageType] = (processedItemCount === keyCount ? argObj.data : argObj.data.slice(0, processedItemCount));
+			//Map the currently relevant storage type to the number of items removed by the invoking sub-removal
+			byStorageTypeRemovedItemCountObj[currentStorageType] = processedItemCount;
 			
 			//If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
 			if(error) byStorageTypeErrorObj[currentStorageType] = error;
@@ -5704,13 +6019,13 @@ bakedGoods = function(){
 			//If related expiration data is to be removed, push an object on to expirationDataCollectionArray 
 			//that will be used by removeExpirationData() to itentify and remove such data 
 			if(removeExpirationDataBool && processedItemCount > 0) 
-				expirationDataCollectionArray.push(createExpirationDataCollection(processedItemCount));
+				expirationDataCollectionArray.push(createItemIdentificationCentricExpirationDataCollection(processedItemCount));
 
 			var canConclude = (++i >= storageTypeCount);
 
 			if(canConclude)
 			{
-				if(argObj.complete)                                 argObj.complete(byStorageTypeRemovedItemKeysObj, byStorageTypeErrorObj);
+				if(argObj.complete)                                 argObj.complete(byStorageTypeRemovedItemCountObj, byStorageTypeErrorObj);
 				if(expirationDataCollectionArray.length > 0)        removeExpirationData(expirationDataCollectionArray);
 			}
 			else
@@ -5747,6 +6062,7 @@ bakedGoods = function(){
 		var i = 0;
 
 		var byStorageTypeResultDataObj = {};
+                var byStorageTypeErrorObj = {};
 		var expirationDataCollectionArray = [];
 
 		//Assure argObj has the properties assumed to be present
@@ -5772,13 +6088,15 @@ bakedGoods = function(){
 		*                       array of objects each containing the key of a data item removed by the most
 		*                       recent removal sub-operation and a string of the item's former location data
 		*/
-		function createExpirationDataObject(keyArray)
+		function createItemIdentificationCentricExpirationDataCollection(keyArray)
 		{
 			var expirationDataObjArray = [];
+                        
+                        var currentStorageMetatype = procureStorageMetatype(currentStorageType);
 
 			//Create a String containing data that describes the location of items in currentStorageType keyed by the elements in keyArray 
-			var storageTypeOptionsObj = procureStorageTypeOptions(defaultStorageTypeOptionsObj[currentStorageType], argObj.options[currentStorageType]);
-			var locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+			var storageTypeOptionsObj = procureStorageTypeOptions(currentStorageType, argObj.options[currentStorageType]);
+			var serializedLocationData = storageOperationFuncObj[currentStorageMetatype].serializeLocationData(storageTypeOptionsObj);
 			/////
 
 			var isFileSystemType = (currentStorageType === "fileSystem" || (currentStorageType === "silverlight"
@@ -5807,16 +6125,16 @@ bakedGoods = function(){
 															: "/");
 					/////
 
-					//Utilize dataItemParentDirectoryPath to help create and assign to locationDataStr, a string which   
+					//Utilize dataItemParentDirectoryPath to help create and assign to serializedLocationData, a string which   
 					//contains data specifying the location of the data item identified by the currently processing key
 					storageTypeOptionsObj.directoryPath = dataItemParentDirectoryPath;
-					locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+					serializedLocationData = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
 					/////
 
-					expirationDataObj = {key: dataItemName, locationData: locationDataStr};
+					expirationDataObj = {key: dataItemName, serializedLocationData: serializedLocationData};
 				}
 				else
-					expirationDataObj = {key: keyArray[i], locationData: locationDataStr};	
+					expirationDataObj = {key: keyArray[i], serializedLocationData: serializedLocationData};	
 
 				expirationDataObjArray.push(expirationDataObj);
 			}
@@ -5848,7 +6166,7 @@ bakedGoods = function(){
 			//If related expiration data is to be removed, push an object on to expirationDataCollectionArray 
 			//that will be used by removeExpirationData() to itentify and remove such data 
 			if(removeExpirationDataBool && processedItemCount > 0) 
-				expirationDataCollectionArray.push(createExpirationDataCollection(resultObj));
+				expirationDataCollectionArray.push(createItemIdentificationCentricExpirationDataCollection(resultObj));
 
 			var canConclude = (++i >= storageTypeCount);
 
@@ -5872,14 +6190,14 @@ bakedGoods = function(){
 
 	function getAll(argObj)
 	{
-		getOrRemoveAll("getAll", argObj);
+		return getOrRemoveAll("getAll", argObj);
 	}
 
 
 
 	function removeAll(argObj)
 	{
-		getOrRemoveAll("removeAll", argObj);	
+		return getOrRemoveAll("removeAll", argObj);	
 	}
 	
 	
@@ -5915,6 +6233,8 @@ bakedGoods = function(){
 			- SQLITE BUG: Numbers with fractional components consisting of more than 15 digits are rounded when cast in to text
 			
 			- CHROME BUG: Errors don't correctly implement DOMError interface
+                        - CHROME BUG: SQLTransactionErrorCallbacks which execute as a result of respectively associated SQLStatementErrorCallbacks that return values other 
+                                      than false do not provide error arguments equivalent in type to those provided by said respective associate SQLStatementErrorCallbacks
 			- CHROME BUG: readAsDataURL does not produce a dataURL with the target blob's media type
 			- CHROME BUG: Root directory can be specified by using null, but doing so in a getDirectory call with the create flag set causes an error (such is not the case for other representations of the root)
 */

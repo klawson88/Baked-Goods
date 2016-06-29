@@ -1,3 +1,26 @@
+/*
+ * The test runners in this file should be executed independant of one another (in other words, 
+ * only one runner should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+
+/**
+* Inserts a backslash in front of each backslash in a String; this allows the original 
+* backslashes in the String to be preserved through interpretation by a Javascript engine
+* as source code or a part of source code. 
+
+* @param str	a String
+* @return		a version of {@code str} in which all backslashes are escaped
+*/
+function escapeBackslashes(str)
+{
+	return str.replace("\\", "\\\\");
+}
+
+
+
 /**
 * Executes a storage operation on an indexedDB database.
 
@@ -22,13 +45,18 @@ function indexedDB_executeStorageOperation(optionsObj, databaseOpenRequestHandle
 }
 
 
+
 /**
-* Progresses the execution of the set of operations this operation
-* belongs to in the event the desired database cannot be accessed.
+* Progresses the execution of the set of operations a given 
+* storage operation belongs to in the event of its failure.
+
+* @param complete                   a function capable of progressing the execution of the set
+*                                   of related storage operations a given storage operation belongs to
+* @param completeFuncArgArray       the prospective argument-array for {@code complete} 
 */
-function createAccessErrorCompleteFunction(complete)
+function createErrorCompleteFunction(complete, completeFuncArgArray)
 {
-    return function (){ complete(0); }
+	return function (error){ if(error) completeFuncArgArray.push(error); complete.apply(complete, completeFuncArgArray); };
 }
 	
 	
@@ -418,31 +446,35 @@ function procureUnconditionalOperationImpetusData(exprStr)
 {
     var impetusDataObj = null;
 
-    //This regex will match a side of exprStr consisting of a single l-value
-    //(the only l-value identifiers defined in the planned execution context of exprStr are 
-    //global identifiers and the (application-reserved) "valueObj" and "keyObj" identifiers)
-    var rValueComplementRegex = /(?:^\s*(?:(?:valueObj(?:(?:\s*\[(?:"|').+?(?:"|')\])|\s*\.[$\w]+)*)|keyObj)\s*===?)|(?:===?\s*(?:(?:valueObj(?:(?:\s*\[(?:"|').+?(?:"|')\])|\s*\.[$\w]+)*)|keyObj)\s*$)/;
+	//This regex will match a side of exprStr consisting of a single l-value
+	//(the only l-value identifiers defined in the planned execution context of exprStr are 
+	//global identifiers and the (application-reserved) "valueObj" and "keyObj" identifiers)
+	var rValueComplementRegex = /(?:^\s*(?:(?:valueObj(?:(?:\s*\[(?:"|').+?(?:"|')\])|\s*\.[$\w]+)*)|keyObj)\s*===?)|(?:===?\s*(?:(?:valueObj(?:(?:\s*\[(?:"|').+?(?:"|')\])|\s*\.[$\w]+)*)|keyObj)\s*$)/;
 
-    //This regex will match a side of exprStr that soley consists of the "keyObj" l-value
-    var keyObjIncompleteEqualityRegex = /(?:===?\s*keyObj)|(?:keyObj\s*===?)/;
+	//This regex will match a side of exprStr that soley consists of the "keyObj" l-value
+	var keyObjIncompleteEqualityRegex = /(?:===?\s*keyObj)|(?:keyObj\s*===?)/;
 
-    var matchDataObj;
-    if((matchDataObj = rValueComplementRegex.exec(exprStr)) != null)	//if there is a side of exprStr consisting of a single l-value
-    {
-        //Reassign exprStr to the unmatched part of exprStr; this will be a single
-        //side of its represented expression which should yields a value when evaluated
-        exprStr = (matchDataObj.index === 0 ? exprStr.substring(matchDataObj[0].length) 
-                                                                                : exprStr.substring(0, matchDataObj.index));
-        //Evaluate exprStr. If it contains non-global l-values, an exception will be thrown
-        var key = eval(exprStr);
+	var matchDataObj;
+	if((matchDataObj = rValueComplementRegex.exec(exprStr)) != null)	//if there is a side of exprStr consisting of a single l-value
+	{
+		//Reassign exprStr to the unmatched part of exprStr; this will be a single
+		//side of its represented expression which should yields a value when evaluated
+		exprStr = matchDataObj.index === 0 
+						? exprStr.substring(matchDataObj[0].length)
+						: exprStr.substring(0, matchDataObj.index);
+							
+		//Evaluate exprStr to yield the result of its represented expression (since the arugment of eval is assumed to
+		//be Javascript source code, we escape  the backslashes in exprStr beforehand to transform it in to its source
+		//code representation). If exprStr contains non-global l-values, an exception will be thrown during evaluation
+		var key = eval(escapeBackslashes(exprStr));
 
-        //Determine the type of database structure expected to index to the matched l-value
-        var originType = (keyObjIncompleteEqualityRegex.test(matchDataObj[0]) ? "objectStore" : "index"); 
+		//Determine the type of database structure expected to index to the matched l-value
+		var originType = (keyObjIncompleteEqualityRegex.test(matchDataObj[0]) ? "objectStore" : "index"); 
 
-        impetusDataObj = {key: key, originType: originType};
-    }
+		impetusDataObj = {key: key, originType: originType};
+	}
 
-    return impetusDataObj;
+	return impetusDataObj;
 }
 
 	
@@ -559,11 +591,11 @@ function indexedDB_getOrRemoveAll(operationType, exprStr, optionsObj, complete)
                     var valueObj = cursor.value;
                     /////
 
-                    if(eval(exprStr) === true)
-                    {
+                    if(eval(escapeBackslashes(exprStr)) === true)				//Since the arugment of eval is assumed to be Javascript source code, we escape the backslashes in 
+					{																//exprStr, transforming it in to its source code representation, before feeding it to the function 
                         if(isGet)
                         {
-                            var resultObj = (hasKeyPath ? value : {key: keyObj, value: valueObj});
+                            var resultObj = (hasKeyPath ? valueObj : {key: keyObj, value: valueObj});
                             dataArray.push(resultObj);
                             ++i;
                         }
@@ -682,8 +714,8 @@ function clear()
 	
 	
 	
-/*	
-//indexedDB_executeStorageOperation test
+/*
+//indexedDB_executeStorageOperation test runner
 (function(){
 
 
@@ -691,15 +723,17 @@ function clear()
 
         var mockOpenDatabaseRequestHandlerFunc = function(openDatabaseRequest){
 
-            assert.ok(openDatabaseRequest.hasOwnProperty("onblocked"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("onupgradeneeded"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("result"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("error"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("source"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("transaction"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("readyState"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("onsuccess"));
-            assert.ok(openDatabaseRequest.hasOwnProperty("onerror"));
+            assert.ok("onblocked" in openDatabaseRequest);
+            assert.ok("onupgradeneeded" in openDatabaseRequest);
+            assert.ok("result" in openDatabaseRequest);
+            assert.ok("error" in openDatabaseRequest);
+            assert.ok("source" in openDatabaseRequest);
+            assert.ok("transaction" in openDatabaseRequest);
+            assert.ok("readyState" in openDatabaseRequest);
+            assert.ok("onsuccess" in openDatabaseRequest);
+            assert.ok("onerror" in openDatabaseRequest);
+			
+			clear();
         }
 
         var accessFailFunc = function(){assert.ok(false, "Error accessing database")};
@@ -712,7 +746,7 @@ function clear()
 */
 	
 /*
-//handleOpenDatabaseRequestExt test
+//handleOpenDatabaseRequestExt test runner
 (function(){
     var objectStoreDataObjArray = [
         {name: "1", keyPath: null, autoIncrement: false},
@@ -784,10 +818,10 @@ function clear()
         QUnit.asyncTest("handleOpenDatabaseRequest", testFunc);
     }
 })()
-*/	
+*/
 	
 /*
-//indexedDB_set test
+//indexedDB_set test runner
 (function(){
 
     var testFunc = function(assert){
@@ -855,10 +889,12 @@ function clear()
 })()
 */
 	
-
+//This function primes the storage facility for the get, remove, get_all,
+//and remove_all isf tests runners; as such, this function must be visible 
+//(i.e uncommented) at the time any of those tests are to be run
 function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, testSpecificOptionsObj){
     
-    var localOptionsObj = (testSpecificOptionsObj ? testSpecificOptionsObj: optionsObj);
+    var localOptionsObj = (testSpecificOptionsObj ? testSpecificOptionsObj : optionsObj);
     
     openDatabaseRequest.onupgradeneeded = function(){
         
@@ -905,7 +941,11 @@ function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, 
 
 	
 /*
-//indexedDB_get test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//indexedDB_get test runner
 (function(){
 
     var testFunc = function(assert){
@@ -939,11 +979,15 @@ function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, 
     QUnit.asyncTest("indexedDB_get", testFunc);
 
 })()
-*/	
+*/
 	
 	
 /*
-//indexedDB_remove test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//indexedDB_remove test runner
 (function(){
 
     var testFunc = function(assert){
@@ -1018,7 +1062,7 @@ function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, 
         
         
 /*
-//isSimpleEqualityExpression test
+//isSimpleEqualityExpression test runner
 (function(){
 
     var isSimpleEqualityExpressionArgObjArray = [
@@ -1048,7 +1092,7 @@ function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, 
 */
 	
 /*
-//procureUnconditionalOperationImpetusData
+//procureUnconditionalOperationImpetusData test runner
 (function(){
     var procureUnconditionalOperationImpetusArgObjArray = [
         {argumentStr: "keyObj[\"testProp\"] === 6", expectedResultDataObj: null},
@@ -1080,7 +1124,11 @@ function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, 
 	
 	
 /*
-//indexedDB_getAll test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//indexedDB_getAll test runner
 (function(){
 
     var testSpecificOptionsObj = {
@@ -1147,8 +1195,11 @@ function setupGetOrRemoveTest(openDatabaseRequest, successFunc, accessFailFunc, 
 */
 
 
-
-//indexedDB_removeAll test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//indexedDB_removeAll test runner
 (function(){
     
     var testSpecificOptionsObj = {

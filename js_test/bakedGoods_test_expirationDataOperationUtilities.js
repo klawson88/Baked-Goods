@@ -4,7 +4,7 @@ var expirationDataRepositoryName = "Baked_Goods_Expiration_Data";
 var defaultStorageTypeExpirationDataPrimedOptionsObj = {
     webSQL: {
         tableData: {name: expirationDataRepositoryName, keyColumnName: "key", columnDefinitions: "(key TEXT PRIMARY KEY, expirationTimeMillis INTEGER)"},
-        tableIndexDataArray:[{name: "Expiration_Data_By_Time", columnNames: "expirationTimeMillis"}]
+        tableIndexDataArray:[{name: "Expiration_Data_By_Time", columnNames: "(expirationTimeMillis)"}]
     }, 
     indexedDB:{
         objectStoreData: {name: expirationDataRepositoryName, keyPath: "key", autoIncrement: false},
@@ -34,9 +34,9 @@ function isDOMError(obj)
  * @return          a String capable of representing {@code str} as 
  *                  a literal char sequence in a regular expression
  */
-function escapeRegexSpecialChars(str)
+function createRegexFriendlyVersionOf(str)
 {
-    return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
+    return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\\\$&");
 }
 
 
@@ -57,7 +57,7 @@ function encodeExpirationDataItemComponent(expirationDataItemComponentStr)
 
     var encodedExpirationDataItemComponent = "";
 
-    var periodHex = "%" + ".".charCodeAt(0).toString(16);
+    var semicolonHex = "%" + ";".charCodeAt(0).toString(16);
     var underscoreHex = "%" + "_".charCodeAt(0).toString(16); 
     var vertBarHex = "%" + "|".charCodeAt(0).toString(16);
 
@@ -71,7 +71,7 @@ function encodeExpirationDataItemComponent(expirationDataItemComponentStr)
 
         switch(curChar)
         {
-            case ".":   encodedExpirationDataItemComponent += periodHex;	break;
+            case ";":   encodedExpirationDataItemComponent += semicolonHex;	break;
             case "_":   encodedExpirationDataItemComponent += underscoreHex;    break;
             case "|":   encodedExpirationDataItemComponent += vertBarHex;       break;
             default:    encodedExpirationDataItemComponent += curChar;          break;
@@ -99,7 +99,7 @@ function decodeExpirationDataItemComponent(encodedExpirationDataItemComponentStr
     var expirationDataItemComponent = "";
     var charBuffer = "";
 
-    var periodHex = "%" + ".".charCodeAt(0).toString(16);
+    var semicolonHex = "%" + ";".charCodeAt(0).toString(16);
     var underscoreHex = "%" + "_".charCodeAt(0).toString(16);
     var vertBarHex = "%" + "|".charCodeAt(0).toString(16);
 
@@ -125,7 +125,7 @@ function decodeExpirationDataItemComponent(encodedExpirationDataItemComponentStr
             //0-index based substring that isn't a component to a hex sequence
             switch(charBuffer)
             {
-                case periodHex:     expirationDataItemComponent += ".";           break;
+                case semicolonHex:  expirationDataItemComponent += ";";           break;
                 case underscoreHex: expirationDataItemComponent += "_";           break;
                 case vertBarHex:    expirationDataItemComponent += "|";           break;
                 default:            
@@ -162,7 +162,7 @@ function decodeExpirationDataItemComponent(encodedExpirationDataItemComponentStr
 *                                               in the collections inside the elements of {@code storedItemDataCollectionObjArray}
 *                                               in the data item-describing elements of the to-be-returned array
 * @return                                       a homogeouns Array consisting of either Objects or Strings each containing identifying (and optionally 
-                                                expiration-time denoting) data of an persisted data item described in {@code storedItemDataCollectionObjArray}
+                                                expiration-time denoting) data of a persisted data item described in {@code storedItemDataCollectionObjArray}
 */ 
 function createExpirationDataArray(storedItemDataCollectionObjArray, includeExpirationTime)
 {
@@ -173,22 +173,28 @@ function createExpirationDataArray(storedItemDataCollectionObjArray, includeExpi
     var collectionCount = storedItemDataCollectionObjArray.length;
     for(var i = 0; i < collectionCount; i++)
     {
-        var currentItemDataCollectionObj = storedItemDataCollectionObjArray[i];
-        var currentStorageType = currentItemDataCollectionObj.storageType;
-        var currentStoredItemDataObjArray = currentItemDataCollectionObj.dataArray;
+            var currentItemDataCollectionObj = storedItemDataCollectionObjArray[i];
+            var currentStorageType = currentItemDataCollectionObj.storageType;
+            var currentStoredItemDataObjArray = currentItemDataCollectionObj.dataArray;
 
-        //Loop through the objects in currentStoredItemDataObjArray, using each to append to expirationDataArray an object 
-        //(with a type/form implicitly specified by doContainExpirationTime) that may either be a String uniquely identifying 
-        //the item described by the object, or an object consisting of said String  and the time the described item is set to expire
-        var currentItemCount = currentStoredItemDataObjArray.length;
-        for(var j = 0; j < currentItemCount; j++)
-        {
-            var currentDataObj = currentStoredItemDataObjArray[j];
-            var keyStorageTypeLocationDataStr = currentDataObj.key + "_" + currentStorageType + "_" + currentDataObj.locationDataStr;
-            expirationDataArray.push((includeExpirationTime ? {key: keyStorageTypeLocationDataStr, expirationTimeMillis: currentDataObj.expirationTimeMillis}
-                                                              : keyStorageTypeLocationDataStr));		
-        }
-        /////
+            //Loop through the objects in currentStoredItemDataObjArray, using each to append to expirationDataArray an object 
+            //(with a type/form implicitly specified by includeExpirationTime) that may either be a String uniquely identifying 
+            //the item described by the object, or an object which contains an object, keyed by the string "value", consisting of 
+            //the aforementioned item-identifying string and the time the described item is set to expire
+            var currentItemCount = currentStoredItemDataObjArray.length;
+            for(var j = 0; j < currentItemCount; j++)
+            {
+                    var currentDataObj = currentStoredItemDataObjArray[j];
+                    var keyStorageTypeLocationDataStr = currentDataObj.key + "_" + currentStorageType + "_" + currentDataObj.serializedLocationData;
+
+                    var expirationData = 
+                            includeExpirationTime
+                            ? {value: {key: keyStorageTypeLocationDataStr, expirationTimeMillis: currentDataObj.expirationTimeMillis}}
+                            : keyStorageTypeLocationDataStr;
+
+                    expirationDataArray.push(expirationData);		
+            }
+            /////
     }
     /////
 
@@ -208,8 +214,20 @@ function createExpirationDataArray(storedItemDataCollectionObjArray, includeExpi
 */
 function setExpirationDataBlob(storageType, expirationDataBlob, complete)
 {
-    var expirationDataKeyValueObj = {key: expirationDataRepositoryName, value: expirationDataBlob};
-    set({data:[expirationDataKeyValueObj], storageTypes: [storageType], options: defaultStorageTypeExpirationDataPrimedOptionsObj, complete: complete});
+    var dataArray = [{key: expirationDataRepositoryName, value: expirationDataBlob}];
+                
+    var optionsObj = {};
+    var storageTypeOptionsObj = (defaultStorageTypeExpirationDataPrimedOptionsObj[storageType] || defaultStorageTypeOptionsObj[storageType]);
+
+    //Establish a mapping between storageType and a copy of storageTypeOptionsObj, in optionsObj, so
+    //that any modifications to be made to the nested object won't modify storageTypeOptionsObj itself 
+    optionsObj[storageType] = {};
+    copyObjectProperties(optionsObj[storageType], [storageTypeOptionsObj] , true);
+    /////
+
+    var functionsObj = {};
+
+    conductStorageOperation("set", storageType, {data: dataArray, options: optionsObj, functions: functionsObj}, complete);
 }
 
 
@@ -236,41 +254,43 @@ function updateSerializedExpirationData(expirationDataBlob, storedItemDataCollec
     //Loop through the objects in storedItemDataCollectionObjArray, using Strings constructed
     //from the storage type and data item-describing objects contained in each along with
     //expirationDataExistingItemModFunc and expirationDataAbsentItemModFunc to modify expirationDataBlob 
-    var collectionCount = storedItemDataCollectionObjArray.length
+    var collectionCount = storedItemDataCollectionObjArray.length;
     for(var i = 0; i < collectionCount; i++)
     {
-        var storedItemDataCollectionObj = storedItemDataCollectionObjArray[i];
-        var storedItemDataArray = storedItemDataCollectionObj.dataArray;
-        var storageType = storedItemDataCollectionObj.storageType;
+            var storedItemDataCollectionObj = storedItemDataCollectionObjArray[i];
+            var storedItemDataArray = storedItemDataCollectionObj.dataArray;
+            var encodedStorageType = encodeExpirationDataItemComponent(storedItemDataCollectionObj.storageType);
 
-        //Loop through the objects in storedItemDataArray, using the key and expiration time 
-        //contained in each along with storageType and location data to modify expirationBlob
-        var dataItemCount = storedItemDataArray.length;
-        for(var j = 0; j < dataItemCount; j++)
-        {
-            var currentDataObj = storedItemDataArray[j];
-            var currentKey = encodeExpirationDataItemComponent(currentDataObj.key);
-
-            var keyStorageTypeLocationStr = escapeRegexSpecialChars(currentKey) + "_" + storageType + "_" + escapeRegexSpecialChars(currentDataObj.locationDataStr);
-            var expirationDataItem = (currentDataObj.expirationTimeMillis !== undefined ? keyStorageTypeLocationStr + "_" + currentDataObj.expirationTimeMillis : undefined);	
-
-            //Search for the expiration data item keyed by keyStorageTypeLocationStr
-            var expirationDataItemKeyRegex = new RegExp("(?:^|\\|)" + keyStorageTypeLocationStr + "_\\d+(?:$|\\|)");
-            var targetSubstrBeginIndex = expirationDataBlob.search(expirationDataItemKeyRegex);
-            /////
-
-            if(targetSubstrBeginIndex !== -1)		//if there is an expiration data item for this key/storage type/location combination
+            //Loop through the objects in storedItemDataArray, using the key and expiration time 
+            //contained in each along with encodedStorageType and location data to modify expirationDataBlob
+            var dataItemCount = storedItemDataArray.length;
+            for(var j = 0; j < dataItemCount; j++)
             {
-                var targetSubstrEndIndexOffset = (expirationDataBlob[targetSubstrBeginIndex] === "|" ? 0 : 1);
-                var targetSubstrEndIndex = expirationDataBlob.indexOf("|", targetSubstrBeginIndex + 1); //"+1" ensures indexOf doesn't match the matched token's first char which may be "|"
-                
-                targetSubstrEndIndex = (targetSubstrEndIndex === -1 ? expirationDataBlob.length : targetSubstrEndIndex + targetSubstrEndIndexOffset);
-                expirationDataBlob = expirationDataExistingItemModFunc(targetSubstrBeginIndex, targetSubstrEndIndex, expirationDataBlob, expirationDataItem);
+                    var currentDataObj = storedItemDataArray[j];
+                    var currentEncodedKey = encodeExpirationDataItemComponent(currentDataObj.key);
+                    var currentEncodedSerializedLocationData = currentDataObj.serializedLocationData;   //the location data in this string was encoded during the construction of the string
+
+                    var encodedKeyStorageTypeLocationStr = encodedStorageType + "_" + currentEncodedKey + "_" + currentEncodedSerializedLocationData;
+                    var expirationDataItem = (currentDataObj.expirationTimeMillis !== undefined ? encodedKeyStorageTypeLocationStr + "_" + currentDataObj.expirationTimeMillis : undefined);	
+
+                    //Search for the expiration data item keyed by keyStorageTypeLocationStr
+                    var expirationDataItemKeyRegex = new RegExp("(?:^|\\|)" + createRegexFriendlyVersionOf(encodedKeyStorageTypeLocationStr) + "_\\d+(?:$|\\|)");
+                    var targetSubstrBeginIndex = expirationDataBlob.search(expirationDataItemKeyRegex);
+                    /////
+
+                    if(targetSubstrBeginIndex !== -1)		//if there is an expiration data item for this key/storage type/location combination
+                    {
+                            targetSubstrBeginIndex += (expirationDataBlob[targetSubstrBeginIndex] === "|" ?  1 : 0);
+
+                            var onePastTargetSubstrEndIndex = expirationDataBlob.indexOf("|", targetSubstrBeginIndex);
+                            onePastTargetSubstrEndIndex = (onePastTargetSubstrEndIndex === -1 ? expirationDataBlob.length : onePastTargetSubstrEndIndex);
+
+                            expirationDataBlob = expirationDataExistingItemModFunc(targetSubstrBeginIndex, onePastTargetSubstrEndIndex, expirationDataBlob, expirationDataItem);
+                    }
+                    else
+                            expirationDataBlob = expirationDataAbsentItemModFunc(expirationDataBlob, expirationDataItem);
             }
-            else
-                expirationDataBlob = expirationDataAbsentItemModFunc(expirationDataBlob, expirationDataItem);
-        }
-        /////
+            /////
     }
 
     //Invoke modCompleteCallback with the modified expiration data blob
@@ -289,9 +309,9 @@ function updateSerializedExpirationData(expirationDataBlob, storedItemDataCollec
                                                     and an object consisting of or identifying the target data of the operation 
 * @param complete                                   a function to execute upon the conclusion of the to-be-conducted storage operation													
 */
-function conductExpirationDataStorageOperaton(storageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete)
+function conductExpirationDataStorageOperation(storageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete)
 {
-    var storageMetatype = (storageType === "localStorage" || storageType === "globalStorage" ? "webStorage" : storageType);
+    var storageMetatype = procureStorageMetatype(storageType);
     var storageTypeCategory = (storageType === "webSQL" || storageType === "indexedDB" ? "database" : "nonDatabase");
 
     var operationType = storageTypeCategoryToOperationTypeObj[storageTypeCategory];
@@ -355,7 +375,7 @@ function recordExpirationData(storedItemDataCollectionObjArray)
     * @return                   a String which consists of the contents of {@code operandStr1} 
     *                           and {@code operandStr1}, seperated by "|" if the former is non-empty
     */
-    function appendStringWithDelimiter(operandStr1, operandStr2)
+    function appendStringWithLeadingDelimiter(operandStr1, operandStr2)
     {
         return operandStr1 += (operandStr1 === "" ? "" : "|" ) + operandStr2;	
     }
@@ -393,7 +413,7 @@ function recordExpirationData(storedItemDataCollectionObjArray)
             //that which is procured from the objects in storedItemDataCollectionObjArray
             if(operationResultObj !== undefined)
                 updateSerializedExpirationData(operationResultObj[expirationDataRepositoryName], storedItemDataCollectionObjArray, 
-                                                                replaceSubstring, appendStringWithDelimiter, addExpirationDataComplete);
+                                                                replaceSubstring, appendStringWithLeadingDelimiter, addExpirationDataComplete);
         }
         else
         {
@@ -411,7 +431,7 @@ function recordExpirationData(storedItemDataCollectionObjArray)
         if(i < expirationDataAptStorageTypesArray.length)
         {
             currentStorageType = expirationDataAptStorageTypesArray[i];
-            conductExpirationDataStorageOperaton(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
+            conductExpirationDataStorageOperation(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
         }
     }
 
@@ -436,17 +456,17 @@ function removeExpirationData(storedItemDataCollectionObjArray, expirationDataCo
     var localExpirationDataAptStorageTypesArray = (expirationDataContainingStorageType ? [expirationDataContainingStorageType] : expirationDataAptStorageTypesArray);
 
     var storageTypeCategoryToDataEntityObj = {
-        database : createExpirationDataArray(storedItemDataCollectionObjArray, false),
-        nonDatabase: [expirationDataRepositoryName]
+            database : createExpirationDataArray(storedItemDataCollectionObjArray, false),
+            nonDatabase: [expirationDataRepositoryName]
     };
 
     var storageTypeCategoryToOperationTypeObj = {
-        database: "remove",
-        nonDatabase: "get"
+            database: "remove",
+            nonDatabase: "get"
     };
-    
-    
-   /**
+
+
+/**
     * Replaces a given substring in a String.
 
     * @param targetSubstrBeginIndex             an int of the index in {@code str} that the to-be-removed substring starts begins
@@ -455,43 +475,44 @@ function removeExpirationData(storedItemDataCollectionObjArray, expirationDataCo
     * @return                                   a String identical to {@code str} sans the substring delimited by 
     *                                           {@code targetSubstrBeginIndex} and {@code onePastTargetSubstrEndIndex}
     */
-    function removeSubstring(targetSubstrBeginIndex, onePastTargetSubstrEndIndex, str)
+    function removeSubstringWithTrailingDelimiter(targetSubstrBeginIndex, onePastTargetSubstrEndIndex, str)
     {
-        return str.substring(0, targetSubstrBeginIndex) + str.substring(onePastTargetSubstrEndIndex);
+            onePastTargetSubstrEndIndex += (onePastTargetSubstrEndIndex < str.length ? 1 : 0);
+            return str.substring(0, targetSubstrBeginIndex) + str.substring(onePastTargetSubstrEndIndex);
     }
-    
+
     /**
      * Returns a given String, unchanged.
-     
+
      * @param str       a String        
      * @return          {@code expirationDataBlob}
      */
     function reflectString(str){ return str; }
-    
-   /**
+
+/**
     * Commences a write of a blob containing expiration 
     * data to the currently processing storage type.
-    
+
     * @param expirationDataBlob     a "|" delimited String consisting of substrings which each
     *                               contain a key identifying a persisted item, the storage facility
     *                               it is persisted in, and the time the item is set to expire
     */
     function removeExpirationDataItemComplete(expirationDataBlob)
     {
-        setExpirationDataBlob(currentStorageType, expirationDataBlob, complete);
+            setExpirationDataBlob(currentStorageType, expirationDataBlob, complete);
     }
 
-   /**
+/**
     * Progresses the expiration data removal operation upon completion of a 
     * sub-operation, depending on the success and type of the completed sub-operation.
-    
+
     * @param processedItemCount     an int denoting the numer of items processed by the invoking sub-operation
     * @param operationResultObj     the Object produced as a result of the invoking sub-operation
     */
     function complete(processedItemCount, operationResultObj)
     {
         var isSuccessful = (arguments.length === 1  || (arguments.length === 2 && !isDOMError(operationResultObj)));
-        var isSuccessfulGet = isSuccessful && (operationResultObj !== undefined) && (operationResultObj[expirationDataRepositoryName] !== null);
+        var isSuccessfulGet = isSuccessful && (operationResultObj !== undefined);
 
         if(isSuccessfulGet)
         {
@@ -503,7 +524,7 @@ function removeExpirationData(storedItemDataCollectionObjArray, expirationDataCo
             if(expirationDataContainerEntity)
             {
                 updateSerializedExpirationData(expirationDataContainerEntity, storedItemDataCollectionObjArray,
-                                                removeSubstring, reflectString, removeExpirationDataItemComplete);			
+                                                                                removeSubstringWithTrailingDelimiter, reflectString, removeExpirationDataItemComplete);			
             }	
             else									
                 isSuccessful = isSuccessfulGet = false;
@@ -516,7 +537,7 @@ function removeExpirationData(storedItemDataCollectionObjArray, expirationDataCo
         }
     }
 
-   /**
+/**
     * Commences an operation to remove the expiration data of the items described in the
     * elements of storedItemDataCollectionObjArray from the currently processing storage facility
     */
@@ -525,7 +546,7 @@ function removeExpirationData(storedItemDataCollectionObjArray, expirationDataCo
         if(i < localExpirationDataAptStorageTypesArray.length)
         {
             currentStorageType = localExpirationDataAptStorageTypesArray[i];
-            conductExpirationDataStorageOperaton(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
+            conductExpirationDataStorageOperation(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, complete);
         }
     }
 
@@ -847,7 +868,7 @@ function removeExpired(dataItemRemovalArgObj)
         if(i < expirationDataAptStorageTypesArray.length)
         {
             currentStorageType = expirationDataAptStorageTypesArray[i];
-            conductExpirationDataStorageOperaton(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, getExpirationDataComplete);
+            conductExpirationDataStorageOperation(currentStorageType, storageTypeCategoryToOperationTypeObj, storageTypeCategoryToDataEntityObj, getExpirationDataComplete);
         }
     }
 
@@ -1377,8 +1398,8 @@ function clearStorageTypeRelatedData()
 
                             if(storageTypeCategory === "nonDatabase")
                             {
-                                expirationDataItemKey = escapeRegexSpecialChars(expirationDataItemKey);
-                                currentItemLocationDataStr = escapeRegexSpecialChars(currentItemLocationDataStr);
+                                expirationDataItemKey = createRegexFriendlyVersionOf(expirationDataItemKey);
+                                currentItemLocationDataStr = createRegexFriendlyVersionOf(currentItemLocationDataStr);
                             }
 
                             var expectedExpirationDataItemKey = expirationDataItemKey + "_" + itemCollectionContainerStorageType + "_" + currentItemLocationDataStr;

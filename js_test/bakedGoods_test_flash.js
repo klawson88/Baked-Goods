@@ -1,3 +1,19 @@
+/*
+ * IMPORTANT
+ * The variables and functions in this file make use of those defined in bakedGoods_test_externalStorageOperationUtilities.js,
+ * as such, the variables and functions in that file must be visible to those in this file in order for those in this file to 
+ * be defined and/or function as expected; such a relationship between the two files can be established by say, referencing that
+ * file before this file in the html page in which the tests in this file are to be run.
+ */
+
+/*
+ * The test runners in this file should be executed independant of one another (in other words, 
+ * only one runner should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+ 
 externalFileAssocAssetsWrapperObj.flash = createExternalFileAssociatedAssetsObj(9, flash_isSupportingVersionInstalled);
 
 /**
@@ -269,7 +285,7 @@ var objCount = testDataItemObjArray.length;
 
 
 var optionsObj = {
-    swfPath: "ext_apps/BakedGoods.swf",
+    swfPath: "ext_bin/BakedGoods.swf",
     lsoName: "Baked_Goods",
     lsoPath: null,
     elementID: "bakedGoods",
@@ -293,6 +309,11 @@ function clear()
 }
 
 /*
+//This function establishes a conduit to the storage facility and primes it for 
+//runners of tests on functions which carry out operations precursory to storage operations 
+//(set, get, remove, etc.); as such, this function must be visible (i.e uncommented) 
+//at the time any of those precursory tests are to be run (and should not be visible
+//when tests other than those are run)
 function setupPrecursoryActionTest(stubLoadComplete, failFunc)
 {
     var originalLoadCompleteFunc = window.bakedGoods_changeExternalFileStatus;
@@ -317,12 +338,17 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
     
     window.bakedGoods_changeExternalFileStatus = stubLoadCompleteWrapperFunc;
     failTimeoutID = setTimeout(failWrapperFunc, timeoutMilliseconds);
-    flash_createDOMElement(optionsObj);
+    externalFileAssocAssetsWrapperObj.flash.domElement = flash_createDOMElement(optionsObj);
 }
+*/
 
-
-
-//flash_createDOMElement test
+/*
+//The test executed by this test runner test evaluates a function, flash_createDOMElement,
+//which it calls indirectly through a call to setupPrecursoryActionTest; as such,  
+//setupPrecursoryActionTestmust be visible (i.e uncommented) whenever this test 
+//is to be run
+//
+//flash_createDOMElement test runner
 (function(){
     
     var testFunc = function(assert){  
@@ -342,7 +368,7 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
 
 
 /*
-//flash_set && flash_get test
+//flash_set && flash_get test runner
 (function(){
 
     var testFunc = function(assert){
@@ -383,7 +409,7 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
 */
 
 /*
-//flash_remove test
+//flash_remove test runner
 (function(){
 
     var testFunc = function(assert){
@@ -433,7 +459,7 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
 
 
 /*
-//flash_getAll test
+//flash_getAll test runner
 (function(){
     
     var filterDataObjArray = [
@@ -493,7 +519,7 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
 
 
 
-//flash_removeAll test
+//flash_removeAll test runner
 (function(){
     
     var filterDataObjArray = [

@@ -416,8 +416,6 @@ package BakedGoods
 				locusLSO.clear();
 				locusLSO.flush();
 				/////
-
-				complete(operationID, [0]);
 			}
 			
 			if (exprStr == "true")

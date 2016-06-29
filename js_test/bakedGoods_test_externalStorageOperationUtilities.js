@@ -7,8 +7,7 @@ var externalFileStatusObj = {NOT_LOADED: 0, LOADING: 1, LOADED: 2, ERROR: 3};
 //able to access a storage facility defined by the storage type
 var externalFileAssocAssetsWrapperObj = {
     /*flash: createExternalFileAssociatedAssetsObj(9, flash_isSupportingVersionInstalled),
-    silverlight: createExternalFileAssociatedAssetsObj(3, silverlight_isSupportingVersionInstalled)   //Many of the facilities & classes used in the xap file require Silverlight >= 3
-    */
+    silverlight: createExternalFileAssociatedAssetsObj(3, silverlight_isSupportingVersionInstalled)*/   //Many of the facilities & classes used in the xap file require Silverlight >= 3
 }
 
 //Contains key-value pairs each consisting of an external storage type and an object containing
@@ -22,6 +21,21 @@ var externalStorageOperationAssetsWrapperObj = {
 
 window.bakedGoods_changeExternalFileStatus = changeExternalFileStatus;
 window.bakedGoods_completeExternalStorageOperation = completeExternalStorageOperation;
+
+
+
+/**
+* Inserts a backslash in front of each backslash in a String; this allows the original 
+* backslashes in the String to be preserved through interpretation by a Javascript engine
+* as source code or a part of source code. 
+
+* @param str	a String
+* @return		a version of {@code str} in which all backslashes are escaped
+*/
+function escapeBackslashes(str)
+{
+	return str.replace("\\", "\\\\");
+}
 
 
 
@@ -243,29 +257,29 @@ function executeExternalStorageOperation(externalStorageOperationAssetsObj, exec
 function conductExternalStorageOperation(externalFileAssocAssetsObj, externalStorageOperationAssetsObj, execute, complete, errorComplete) 
 {
     var fileStatus = externalFileAssocAssetsObj.status;
-    
-    if(externalFileAssocAssetsObj.canUse && fileStatus !== externalFileStatusObj.ERROR)
-    {
-        if(fileStatus === externalFileStatusObj.NOT_LOADED || fileStatus === externalFileStatusObj.LOADING)
-        {
-            //Queue the storage operation (by queuing  its associated assets: execute, complete, errorComplete);
-            //It will be executed upon the successful loading of the file which contains code able to access the locus storage facility
-            queueExternalStorageOperation(externalStorageOperationAssetsObj, execute, complete, errorComplete);
-            
-            //If the file containing code able to perform storage operations on the locus facility has not been loaded,
-            //update its load status before creating a DOM element which will contain the data defined by the file
-            if(fileStatus === externalFileStatusObj.NOT_LOADED)
-            {
-                fileStatus = externalFileAssocAssetsObj.fileStatus = externalFileStatusObj.LOADING;
-                externalFileAssocAssetsObj.createDOMElement();
-            }
-            /////
-        }	
-        else    //can execute storage operation
-            executeExternalStorageOperation(externalStorageOperationAssetsObj, execute, complete);       
-    }
-    else
-        errorComplete();
+		
+	if(externalFileAssocAssetsObj.canUse && fileStatus !== externalFileStatusObj.ERROR)
+	{
+		if(fileStatus === externalFileStatusObj.NOT_LOADED || fileStatus === externalFileStatusObj.LOADING)
+		{
+			//Queue the storage operation (by queuing  its associated assets: execute, complete, errorComplete);
+			//It will be executed upon the successful loading of the file which contains code able to access the locus storage facility
+			queueExternalStorageOperation(externalStorageOperationAssetsObj, execute, complete, errorComplete);
+			
+			//If the file containing code able to perform storage operations on the locus facility has not been loaded,
+			//update its load status before creating a DOM element which will contain the data defined by the file
+			if(fileStatus === externalFileStatusObj.NOT_LOADED)
+			{
+				fileStatus = externalFileAssocAssetsObj.status = externalFileStatusObj.LOADING;
+				externalFileAssocAssetsObj.createDOMElement();
+			}
+			/////
+		}	
+		else    //can execute storage operation
+			executeExternalStorageOperation(externalStorageOperationAssetsObj, execute, complete);       
+	}
+	else
+		errorComplete();
 }
 
 
@@ -305,8 +319,8 @@ function createConditionalGetAllCompleteFunc(exprStr, complete, onlyKeys)
             var valueObj = currentDataItemObj.value; 
             /////
 
-            if(eval(exprStr) === true)
-            {
+            if(eval(escapeBackslashes(exprStr)) === true)		//Since the arugment of eval is assumed to be Javascript source code, we escape the backslashes in 
+			{														//exprStr, transforming it in to its source code representation, before feeding it to the function
                 var resultEntity = (onlyKeys ? keyObj : currentDataItemObj);
                 resultEntityArray.push(resultEntity);
             }
@@ -412,52 +426,55 @@ function createExternalStorageErrorCompleteFunc(operationType, complete)
 (function(){
     
     var testFunc = function(assert){
-        var isPluginUsableStubObj = {yes: function(){return true;}, no: function(){return false;}};
-
-        var mockStorageType = "test";
-        
+		
+		var mockExternalFileAssocAssetsObj = {
+			createDOMElement: function(){
+				assert.ok(this.canUse);
+				assert.strictEqual(this.status, externalFileStatusObj.LOADING);
+			}, 
+			canUse:undefined, 
+			status:undefined
+		};
+		
+		var mockExternalStorageOperationAssetsObj = {activeOperationCompleteFuncObj:{}};
+		
+        var canUsePluginStubObj = {yes: function(){return true;}, no: function(){return false;}};
+		
         var queueExternalStorageOperationStub = function(){
-            var isFileLoaded = (fileStatus === externalFileStatusObj.NOT_LOADED);
-            var isFileLoading = (fileStatus === externalFileStatusObj.LOADING);
+            var doesFileHaveStatusOf_notLoaded = (mockExternalFileAssocAssetsObj.status === externalFileStatusObj.NOT_LOADED);
+            var doesFileHaveStatusOf_loading = (mockExternalFileAssocAssetsObj.status === externalFileStatusObj.LOADING);
             
-            assert.ok(isFileLoaded || isFileLoading);
-            assert.ok(isPluginUsable());
-        }
-        
-        var executePluginDOMElementCreationStub = function(){
-            assert.ok(isPluginUsable());
-            assert.strictEqual(fileStatus, externalFileStatusObj.NOT_LOADED);
-        }
+            assert.ok(doesFileHaveStatusOf_notLoaded || doesFileHaveStatusOf_loading);
+            assert.ok(mockExternalFileAssocAssetsObj.canUse);
+        };
+		
         var executeExternalStorageOperationStub = function(){
-            assert.ok(isPluginUsable());
-            assert.strictEqual(fileStatus, externalFileStatusObj.LOADED);
-        }
+            assert.ok(mockExternalFileAssocAssetsObj.canUse);
+            assert.strictEqual(mockExternalFileAssocAssetsObj.status, externalFileStatusObj.LOADED);
+        };
         
         var errorCompleteStub = function(){
-            var hasFileLoadFailed = (fileStatus === externalFileStatusObj.ERROR);
-            assert.ok(!isPluginUsable() || hasFileLoadFailed);
-        }
-        
+            var hasFileLoadFailed = (mockExternalFileAssocAssetsObj.status === externalFileStatusObj.ERROR);
+            assert.ok(!mockExternalFileAssocAssetsObj.canUse || hasFileLoadFailed);
+        };
+		
         var queueExternalStorageOperationOriginal = window.queueExternalStorageOperation;
         window.queueExternalStorageOperation = queueExternalStorageOperationStub;
         
-        for(var isPluginUsableBool in isPluginUsableStubObj)
+        for(var canUsePluginBool in canUsePluginStubObj)
         {
-            var isPluginUsable = isPluginUsableStubObj[isPluginUsableBool];
+			mockExternalFileAssocAssetsObj.canUse = canUsePluginStubObj[canUsePluginBool]();
             
             for(var fileStatusLabel in externalFileStatusObj)
             {
-                var fileStatus = externalFileStatusObj[fileStatusLabel];
-                    
-                attemptExternalStorageOperation(mockStorageType, isPluginUsable, executePluginDOMElementCreationStub, 
-                                      fileStatus, executeExternalStorageOperationStub, null, errorCompleteStub);
-                 
+                mockExternalFileAssocAssetsObj.status = externalFileStatusObj[fileStatusLabel];
+                conductExternalStorageOperation(mockExternalFileAssocAssetsObj, mockExternalStorageOperationAssetsObj, executeExternalStorageOperationStub, null, errorCompleteStub);
             }
         }
         
         window.queueExternalStorageOperation = queueExternalStorageOperationOriginal;
     }
     
-    QUnit.test("attemptExternalStorageOperation", testFunc);
+    QUnit.test("conductExternalStorageOperation", testFunc);
 })()
 */

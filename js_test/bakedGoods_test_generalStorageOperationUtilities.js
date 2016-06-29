@@ -54,7 +54,7 @@ var defaultStorageTypeOptionsObj = {
         /////
     },
     flash:{
-        swfPath: "ext_apps/BakedGoods.swf",
+        swfPath: "ext_bin/BakedGoods.swf",
 
         lsoName: "Baked_Goods",
         lsoPath: null,
@@ -66,7 +66,7 @@ var defaultStorageTypeOptionsObj = {
         allowScriptAccess: "sameDomain"
     },
     silverlight: {
-        xapPath: "ext_apps/bakedGoods.xap",
+        xapPath: "ext_bin/bakedGoods.xap",
 
         storeScope: "application",
         conduitClass: "IsolatedStorageSettings",
@@ -147,7 +147,7 @@ var storageOperationFuncObj = {
 * @param recipientObj		the object that will receive the properties processed by this operation
 * @param donorObjArray		an array of Objects each containing the properties to be copied to {@code recipientObj}
 * @param copyOnlyIfAbsent	a boolean denoting whether the properties of the objects in {@code donorObjArray} 
-                                                        with key components already present in {@code recipientObj} should be copied
+                                with key components that appear in respectively preceding objects should be copied
 */
 function copyObjectProperties(recipientObj, donorObjArray, copyOnlyIfAbsent)
 {
@@ -196,6 +196,18 @@ function procureOperationOptions(storageOperationType, specifiedOptionsObj)
 
 
 /**
+* 
+* @param storageType
+* @returns {unresolved}
+*/
+function procureStorageMetatype(storageType)
+{
+    return (storageType === "globalStorage" || storageType === "sessionStorage" || storageType === "localStorage" ? "webStorage" : storageType);
+}
+
+
+
+/**
 * Produces an object containing all of the operation-related preferences
 * defined for a storage facility with either user or default values. 
 
@@ -208,18 +220,21 @@ function procureOperationOptions(storageOperationType, specifiedOptionsObj)
 */
 function procureStorageTypeOptions(storageType, specifiedOptionsObj)
 {
-    var isSupportedStorageType = defaultStorageTypeOptionsObj.hasOwnProperty(storageType);
-
     var optionsObj;
-    if(isSupportedStorageType && specifiedOptionsObj)
+    var defaultOptionsObj = defaultStorageTypeOptionsObj[storageType];
+
+    if(defaultOptionsObj)
     {
-        optionsObj = specifiedOptionsObj;
-        copyObjectProperties(optionsObj, [defaultStorageTypeOptionsObj[storageType]], true);
+        if(specifiedOptionsObj)
+        {
+            optionsObj = specifiedOptionsObj;
+            copyObjectProperties(optionsObj, [defaultOptionsObj], true);
+        }
+        else
+            optionsObj = defaultOptionsObj;
     }
-    else if(isSupportedStorageType)
-        optionsObj = defaultStorageTypeOptionsObj[storageType];
     else
-        optionsObj = specifiedOptionsObj;
+        optionsObj = (specifiedOptionsObj || {});
 
     return optionsObj;
 }
@@ -238,8 +253,7 @@ function procureStorageTypeOptions(storageType, specifiedOptionsObj)
 function conductStorageOperation(operationType, storageType, argObj, complete)
 {
     //Obtain the meta-type of storageType (if defined), which is the collection of storage types that it belongs to
-    var storageMetatype = (storageType === "globalStorage" || storageType === "sessionStorage" 
-                            || storageType === "localStorage" ? "webStorage" : storageType);
+    var storageMetatype = procureStorageMetatype(storageType);
 
     //Use the default operation preferences associated with storageType, along with any overriding 
     //values specified by the user, to get the object of preferences to be used for this storage operation
@@ -257,17 +271,28 @@ function conductStorageOperation(operationType, storageType, argObj, complete)
     //the desired storage operation on the specified storage type
     if(storageMetatype !== storageType) operationArgArray.push(storageType);
 
-    if(operationType.indexOf("All") === -1) 
-        operationArgArray.push(argObj.data);
-    else if(storageType === "indexedDB" || storageType === "webSQL" || storageType === "flash" || storageType === "silverlight")		//conditional ("getAll", "removeAll") operation
+    if(operationType.indexOf("All") !== -1) 
     {
-        //If argObj.filter has no meaningful value, assign it to "true" which, when evaluated, will
-        //return true for, and allow for the processing of, all data items encountered by the operation
-        if(argObj.filter === undefined || argObj.filter === null || argObj.filter === "") 
-            argObj.filter = "true";
+        //If it is a "removeAll" operation that is to be conducted, the removeExpirationData property of argObj.options, 
+        //which is a preference indirectly defined for the operation, is inserted in to storageTypeOptionsObj,
+        //and act which directly defines the preference for the operation, giving the operation access to 
+        //the preferecnce, which it requires to compose and provide the expected data to the complete callback
+        if(operationType === "removeAll")
+            storageTypeOptionsObj.removeExpirationData = argObj.options.removeExpirationData;
+        /////
 
-        operationArgArray.push(argObj.filter);
+        if(storageType === "indexedDB" || storageType === "webSQL" || storageType === "flash" || storageType === "silverlight")     //conditional ("getAll", "removeAll") operation
+        {
+                //If argObj.filter has no meaningful value, assign it to "true" which, when evaluated, will
+                //return true for, and allow for the processing of, all data items encountered by the operation
+                if(argObj.filter === undefined || argObj.filter === null || argObj.filter === "") 
+                        argObj.filter = "true";
+
+                operationArgArray.push(argObj.filter);
+        }
     }
+    else
+        operationArgArray.push(argObj.data);
 
     Array.prototype.push.apply(operationArgArray, [storageTypeOptionsObj, complete]);
     /////
@@ -283,7 +308,7 @@ function conductStorageOperation(operationType, storageType, argObj, complete)
  * @param dataItemObj               an Object containing the identifying and payload data of a item persisted in {@code storageType}
  * @param storageType               a String denoting the type of storage facility that {@code dataItemObj} was persisted in
  * @param storageTypeOptionsObj     an Object containing the {@code storageType}-related preferences used to store {@code dataItemObj}
- * @return                          an object which uniquely identifies the payload data of {@code dataItemObj} in {@code storageType}
+ * @return                          an Object which uniquely identifies the payload data of {@code dataItemObj} in {@code storageType}
  */
 function procureDataItemIdentifyingEntityExternal(dataItemObj, storageType, storageTypeOptionsObj)
 {	
@@ -346,8 +371,8 @@ function procureDataItemIdentifyingEntityExternal(dataItemObj, storageType, stor
 
 
 /**
-* Creates an object that can be used to record the expiration data of data items with
-* expiration times stored during the most recently run sub-storage operation.
+* Creates an object that can be used to record the expiration data of data items with specified
+* expiration times that were stored during the most recently run sub-storage operation.
  
 * @param onePastSubsetEnd       an int of one past the index in {@code argObj.dataArray}
 *                               containing the last object in the desired subset
@@ -360,7 +385,8 @@ function createItemExpirationDataCollectionExternal(currentStorageType, argObj, 
     var storageTypeExprDataObj = null;
     var toExpireDataItemObjArray = [];
 
-    var locationDataBlob;
+    var storageMetatype = procureStorageMetatype(currentStorageType);
+    var serializedLocationData;
 
     //Procure the storage facility-related preferences used in the most recently executed storage operation. 
     //Contained location data will be serialized for use in the creation of expiration data for the stored items
@@ -373,18 +399,18 @@ function createItemExpirationDataCollectionExternal(currentStorageType, argObj, 
     for(var i = 0; i < onePastSubsetEnd; i++)
     {
         var currentDataObj = dataArray[i];
-        if(currentDataObj.hasOwnProperty("expirationTime"))
+        if(currentDataObj.hasOwnProperty("expirationTimeMillis"))
         {
             //Serialize the data which describes where the items stored by this operation
             //is/will be located within the currently relevant storage facility.
-            if(locationDataBlob === undefined) 
-                locationDataBlob = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+            if(serializedLocationData === undefined) 
+                serializedLocationData = storageOperationFuncObj[storageMetatype].serializeLocationData(storageTypeOptionsObj);
 
             var key = procureDataItemIdentifyingEntity(currentDataObj, currentStorageType, storageTypeOptionsObj);
 
             //Push an object on to toExpireDataItemObjArray consisting of data identifying 
             //the currently processing item, its location, and its expiration time
-            toExpireDataItemObjArray.push({key: key, expirationTime: currentDataObj.expirationTime, locationData: locationDataBlob});
+            toExpireDataItemObjArray.push({key: key, expirationTimeMillis: currentDataObj.expirationTimeMillis, serializedLocationData: serializedLocationData});
         }
     }
     /////
@@ -417,15 +443,16 @@ function set(argObj)
     //Will be used to sequentially conduct a set operation on each of the storage facilities named in argObj
     var i = 0;
 
-    //Will contain key-value pairs each consisting of a storage type specified in argObj
-    //and an array of the keys of the data items successfully stored in it by this operation
-    var byStorageTypeStoredKeysObj = [];
-    
-    //Will contain key-value pairs each consisting of a storage type accessed by a 
+    //Will contain key-value pairs each consisting of a storage facility specified 
+    //in argObj and an object consisting of the bounds of the range of items in
+    //argObj.data successfully stored in the storage type by this operation 
+    var byStorageTypeStoredItemRangeDataObj = {};
+
+    //Will contain key-value pairs each consisting of a storage facility accessed by a 
     //sub-operation which spawned an error, and the DOMError representation of that error
     var byStorageTypeErrorObj = {};
 
-    //Will contain objects each consisting of a storage facility specified in argObj and an
+    //Will contain objects each consisting of a storage facility specified in argObj and an 
     //array containing the expiration-related data of items stored in it by this operation
     var expirationDataCollectionArray = [];
 
@@ -436,82 +463,84 @@ function set(argObj)
 
     var currentStorageType = argObj.storageTypes[0];
     var storageTypeCount = argObj.storageTypes.length;
+
+    var firstUnprocessedItemAbsoluteIndex = 0;
     var unprocessedItemCount = argObj.data.length;
 
     var operationOptionsObj = procureOperationOptions("set", argObj.options);
-    var recordExpirationData = operationOptionsObj.recordExpirationData;
-    var conductDisjointly = operationOptionsObj.conductDisjointly;
+    var doRecordExpirationData = operationOptionsObj.recordExpirationData;
+    var doConductDisjointly = operationOptionsObj.conductDisjointly;
 
-   /**
+/**
     * Procures an object that uniquely identifies the payload data
     * of an item persisted in a given storage facility.
 
-    * @param dataItemObj               an Object containing the identifying and payload data of a item persisted in {@code storageType}
+    * @param dataItemObj               an Object containing the identifying and payload data of an item persisted in {@code storageType}
     * @param storageType               a String denoting the type of storage facility that {@code dataItemObj} was persisted in
     * @param storageTypeOptionsObj     an Object containing the {@code storageType}-related preferences used to store {@code dataItemObj}
-    * @return                          an object which uniquely identifies the payload data of {@code dataItemObj} in {@code storageType}
+    * @return                          an Object which uniquely identifies the payload data of {@code dataItemObj} in {@code storageType}
     */
     function procureDataItemIdentifyingEntity(dataItemObj, storageType, storageTypeOptionsObj)
     {	
-        var key;
+            var key;
 
-        if(storageType === "indexedDB")
-        {
-            if(storageTypeOptionsObj.objectStoreData.keyPath !== null)
+            if(storageType === "indexedDB")
             {
-                //Split the supplied key path in to an array of its constituent keys
-                var keyPathComponentArray  = storageTypeOptionsObj.objectStoreData.keyPath.split(".");
-                var keyPathComponentCount = keyPathComponentArray.length;
+                    if(storageTypeOptionsObj.objectStoreData.keyPath !== null)
+                    {
+                            //Split the supplied key path in to an array of its constituent keys
+                            var keyPathComponentArray  = storageTypeOptionsObj.objectStoreData.keyPath.split(".");
+                            var keyPathComponentCount = keyPathComponentArray.length;
 
-                //Iterate through the elements in keyPathComponentArray, using each
-                //to obtain the increasingly nested object it keys in dataItemObj.key
-                var currentDataObj = dataItemObj.value; 
-                for(var i = 0; i < keyPathComponentCount; i++)
-                    currentDataObj = currentDataObj[keyPathComponentArray[i]];
-                /////
+                            //Iterate through the elements in keyPathComponentArray, using each
+                            //to obtain the increasingly nested object it keys in dataItemObj.key
+                            var currentDataObj = dataItemObj.value; 
+                            for(var i = 0; i < keyPathComponentCount; i++)
+                                    currentDataObj = currentDataObj[keyPathComponentArray[i]];
+                            /////
 
-                key = currentDataObj;
+                            key = currentDataObj;
+                    }
+                    else
+                            key = dataItemObj.key;
+            }
+            else if(storageType === "webSQL")
+            {
+                    var columnDefinitionsStr = storageTypeOptionsObj.tableData.columnDefinitions;
+
+                    //If the column definitions in columnDefinitionsStr are enclosed by parentheses, omit them
+                    if(columnDefinitionsStr[0] === "(") columnDefinitionsStr = columnDefinitionsStr.substring(1, columnDefinitionsStr.length - 1);
+
+                    //Split columnDefinitionsStr in to an array of its constituent column definition Strings
+                    var columnDefinitionsArray = columnDefinitionsStr.split(",");
+
+                    key = "";
+
+                    //Loop through the column definition Strings in columnDefinitionsArray, composing a 
+                    //boolean expression comprised of equality expressions each consisting of the name of a
+                    //column in the relevant table's primary key along with the value it keys in dataItemObj.value
+                    var columnCount = columnDefinitionsArray.length;
+                    for(var i = 0; i < columnCount; i++)
+                    {
+                            var currentColumnDefStr = columnDefinitionsArray[i];
+
+                            if(/\bPRIMARY KEY\b/.test(currentColumnDefStr))     //if currentColumnDefStr defines a column that is part of the 
+                            {                                                       //primary key of the table described by optionsObj.tableData
+                                    var currentColumnName = /\w+/.exec(currentColumnDefStr)[0];
+                                    key += (key === "" ? "" : " && " ) + currentColumnName + " === " + dataItemObj.value[currentColumnName];
+                            }
+                    }
+                    /////
             }
             else
-                key = dataItemObj.key;
-        }
-        else if(storageType === "webSQL")
-        {
-            var columnDefinitionsStr = storageTypeOptionsObj.tableData.columnDefinitions;
+                    key = dataItemObj.key;
 
-            //If the column definitions in columnDefinitionsStr are enclosed by parentheses, omit them
-            if(columnDefinitionsStr[0] === "(") columnDefinitionsStr = columnDefinitionsStr.substring(1, columnDefinitionsStr.length - 1);
-
-            //Split columnDefinitionsStr in to an array of its constituent column definition Strings
-            var columnDefinitionsArray = columnDefinitionsStr.split(",");
-
-            key = "";
-
-            //Loop through the column definition Strings in columnDefinitionsArray, composing a 
-            //boolean expression comprised of equality expressions each consisting of the name of a
-            //column in the relevant table's primary key along with the value it keys in dataItemObj.value
-            var columnCount = columnDefinitionsArray.length;
-            for(var i = 0; i < columnCount; i++)
-            {
-                var currentColumnDefStr = columnDefinitionsArray[i];
-
-                if(/\bPRIMARY KEY\b/.test(currentColumnDefStr))     //if currentColumnDefStr defines a column that is part of the 
-                {                                                       //primary key of the table described by optionsObj.tableData
-                    var currentColumnName = /\w+/.exec(currentColumnDefStr)[0];
-                    key += (key === "" ? "" : " && " ) + currentColumnName + " === " + dataItemObj.value[currentColumnName];
-                }
-            }
-            /////
-        }
-        else
-            key = dataItemObj.key;
-
-        return key;
+            return key;
     }
 
-   /**
-    * Creates an object that can be used to record the expiration data of data items with
-    * expiration times stored during the most recently run sub-storage operation.
+/**
+    * Creates an object that can be used to record the expiration data of data items with specified
+    * expiration times that were stored during the most recently run sub-storage operation.
 
     * @param onePastSubsetEnd       an int of one past the index in {@code argObj.dataArray}
     *                               containing the last object in the desired subset
@@ -521,90 +550,96 @@ function set(argObj)
     */
     function createItemExpirationDataCollection(onePastSubsetEnd)
     {
-        var storageTypeExprDataObj = null;
-        var toExpireDataItemObjArray = [];
+            var storageTypeExprDataObj = null;
+            var toExpireDataItemObjArray = [];
 
-        var locationDataBlob;
+            var currentStorageMetatype = procureStorageMetatype(currentStorageType);
+            var serializedLocationData;
 
-        //Procure the storage facility-related preferences used in the most recently executed storage operation. 
-        //Contained location data will be serialized for use in the creation of expiration data for the stored items
-        var storageTypeOptionsObj = procureStorageTypeOptions(currentStorageType, argObj.options[currentStorageType]);
+            //Procure the storage facility-related preferences used in the most recently executed storage operation. 
+            //Contained location data will be serialized for use in the creation of expiration data for the stored items
+            var storageTypeOptionsObj = procureStorageTypeOptions(currentStorageType, argObj.options[currentStorageType]);
 
-        //Loop through the data objects in dataArray, pushing on to toExpireDataItemObjArray objects each
-        //consisting of the contents of a data item object with an expiration time along with data which 
-        //describes where the item's key-value pair is stored in the currently relevant storage facility
-        var dataArray = argObj.data;
-        for(var i = 0; i < onePastSubsetEnd; i++)
-        {
-            var currentDataObj = dataArray[i];
-            if(currentDataObj.hasOwnProperty("expirationTime"))
+            //Loop through the data objects in dataArray, pushing on to toExpireDataItemObjArray objects each
+            //consisting of the contents of a data item object with an expiration time along with data which 
+            //describes where the item's key-value pair is stored in the currently relevant storage facility
+            var dataArray = argObj.data;
+            for(var i = 0; i < onePastSubsetEnd; i++)
             {
-                //Serialize the data which describes where the items stored by this operation
-                //is/will be located within the currently relevant storage facility.
-                if(locationDataBlob === undefined) 
-                    locationDataBlob = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+                    var currentDataObj = dataArray[i];
+                    if(currentDataObj.hasOwnProperty("expirationTimeMillis"))
+                    {
+                            //Serialize the data which describes where the items stored by this operation
+                            //are/will be located within the currently relevant storage facility.
+                            if(serializedLocationData === undefined) 
+                                    serializedLocationData = storageOperationFuncObj[currentStorageMetatype].serializeLocationData(storageTypeOptionsObj);
 
-                var key = procureDataItemIdentifyingEntity(currentDataObj, currentStorageType, storageTypeOptionsObj);
+                            var key = procureDataItemIdentifyingEntity(currentDataObj, currentStorageType, storageTypeOptionsObj);
 
-                //Push an object on to toExpireDataItemObjArray consisting of data identifying 
-                //the currently processing item, its location, and its expiration time
-                toExpireDataItemObjArray.push({key: key, expirationTime: currentDataObj.expirationTime, locationData: locationDataBlob});
+                            //Push an object on to toExpireDataItemObjArray consisting of data identifying 
+                            //the currently processing item, its location, and its expiration time
+                            toExpireDataItemObjArray.push({key: key, expirationTimeMillis: currentDataObj.expirationTimeMillis, serializedLocationData: serializedLocationData});
+                    }
             }
-        }
-        /////
+            /////
 
-        //If there was at least one item with an expiration time that was stored during the most recently run sub-operation, 
-        //create an object which relates the storage facility to the elements in toExpireDataItemObjArray
-        if(toExpireDataItemObjArray.length > 0)
-            storageTypeExprDataObj = {storageType: currentStorageType, dataArray: toExpireDataItemObjArray};			
+            //If there was at least one item with an expiration time that was stored during the most recently run sub-operation, 
+            //create an object which relates the storage facility to the elements in toExpireDataItemObjArray
+            if(toExpireDataItemObjArray.length > 0)
+                    storageTypeExprDataObj = {storageType: currentStorageType, dataArray: toExpireDataItemObjArray};			
 
-        return storageTypeExprDataObj;
+            return storageTypeExprDataObj;
     }
 
-   /**
+/**
     * Progresses the execution of the set of to-be-conducted "set" operations after the conclusion of one.
 
-    * @param processedItemCount     an int denoting the number of items in {@code argObj.dataArray} processed by the invoking set sub-operation
-    * @param error                  (optional) the DOMError spawned by the invoking set sub-operation
+    * @param processedItemCount		an int denoting the number of items in {@code argObj.dataArray} processed by the invoking set operation
+    * @param error                 (optional) the DOMError spawned by the invoking set sub-operation
     */
     function complete(processedItemCount, error)
     {
-        var currentUnprocessedItemCount =  unprocessedItemCount - processedItemCount;
+            var currentUnprocessedItemCount =  unprocessedItemCount - processedItemCount;
 
-        //Associate the number of items processed by the invoking sub-operation with the storage facility it operated in
-        byStorageTypeStoredKeysObj[currentStorageType] = processedItemCount;
-        
-        //If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
-        if(error) byStorageTypeErrorObj[currentStorageType] = error;
+            //Associate the number of items processed by the invoking sub-operation with the storage facility it operated in
+            byStorageTypeStoredItemRangeDataObj[currentStorageType] = {
+                storedItemRangeBegin: firstUnprocessedItemAbsoluteIndex,
+                onePastStoredItemRangeEnd: firstUnprocessedItemAbsoluteIndex + processedItemCount
+            };
 
-        //If the expiration-related data of the stored items is to be recorded, push an object containing 
-        //such data on to expirationDataCollectionArray, which will be utilized by recordExpirationData when it is called
-        if(recordExpirationData)
-        {
-            var expirationDataCollectionObj = createItemExpirationDataCollection(currentUnprocessedItemCount);
-            if(expirationDataCollectionObj !== null) expirationDataCollectionArray.push(expirationDataCollectionObj);
-        }
-        /////
+            //If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
+            if(error) byStorageTypeErrorObj[currentStorageType] = error;
 
-        var processedAllItemsThisRun = (currentUnprocessedItemCount === 0);
-        var canConclude = ++i >= storageTypeCount || (conductDisjointly ? false : processedAllItemsThisRun); 
-
-        if(canConclude)
-        {
-            if(argObj.complete)         argObj.complete(byStorageTypeStoredKeysObj, byStorageTypeErrorObj);
-            if(recordExpirationData)	recordExpirationData(expirationDataCollectionArray);
-        }
-        else
-        {
-            if(!conductDisjointly)
+            //If the expiration-related data of the stored items is to be recorded, push an object containing 
+            //such data on to expirationDataCollectionArray, which will be utilized by recordExpirationData when it is called
+            if(doRecordExpirationData)
             {
-                argObj.dataArray.splice(processedItemCount);		//Remove the items stored in this run of the operation from the array of to-be-stored items
-                unprocessedItemCount = currentUnprocessedItemCount;	//Update the number of unprocessed items to that which were not stored by this operation
+                    var expirationDataCollectionObj = createItemExpirationDataCollection(processedItemCount);
+                    if(expirationDataCollectionObj !== null) expirationDataCollectionArray.push(expirationDataCollectionObj);
             }
+            /////
 
-            currentStorageType = argObj.storageTypes[i];
-            conductStorageOperation("set", currentStorageType, argObj, complete);
-        }
+            var processedAllItemsThisRun = (currentUnprocessedItemCount === 0);
+            var canConclude = ++i >= storageTypeCount || (doConductDisjointly ? false : processedAllItemsThisRun); 
+
+            if(canConclude)
+            {
+                    if(argObj.complete)             argObj.complete(byStorageTypeStoredItemRangeDataObj, byStorageTypeErrorObj);
+                    if(doRecordExpirationData)	recordExpirationData(expirationDataCollectionArray);
+            }
+            else
+            {
+                    if(!doConductDisjointly)
+                    {
+                            argObj.dataArray.splice(processedItemCount);                //Remove the items stored in this run of the operation from the array of to-be-stored items
+
+                            firstUnprocessedItemAbsoluteIndex += processedItemCount;    //Update the index at which the first unprocessed item is located in the original argObj.dataArray 
+                            unprocessedItemCount = currentUnprocessedItemCount;         //Update the number of unprocessed items to that which were not stored by this operation
+                    }
+
+                    currentStorageType = argObj.storageTypes[i];
+                    conductStorageOperation("set", currentStorageType, argObj, complete);
+            }
     }
 
     conductStorageOperation("set", currentStorageType, argObj, complete);
@@ -681,10 +716,10 @@ function get(argObj)
     //on the disjointness of the retrieval operation:
     // non-disjoint:	mappings each consisting of a key in argObj.data and the value it keys
     //			in the first storage facility in argObj.storageTypes it appears in
-    // disjoint:	mappings each consisting of a storage type in argObj.storage types and an object containing 
+    // disjoint:	mappings each consisting of a storage type in argObj.storageTypes and an object containing 
     //			mappings each consisting of a key in argObj.data and the value it keys in the storage type
     var resultDataObj = {};
-    
+
     //Will contain key-value pairs each consisting of a storage type accessed by a 
     //sub-operation which spawned an error, and the DOMError representation of that error
     var byStorageTypeErrorObj = {};
@@ -711,7 +746,7 @@ function get(argObj)
     var storageTypeCount = argObj.storageTypes.length;
 
 
-   /**
+/**
     * Extracts from {@code argObj.data} the keys that were not present in 
     * the target storage facility of the most recently executed sub-retrieval. 
     *
@@ -719,136 +754,143 @@ function get(argObj)
     * relevant storage facility and those which key null values. Thus, keys  
     * which fall in to either category will be included in the returned array.
 
-    * @return		an Array consisting of the keys in {@code argObj.data} that
-    *                   were left unprocessed by, or did not key anything in the target
-    *                   storage facility of, the most recently executed sub-retrieval
+    * @param onePastProcessedKeySubsetEnd       an int of one past the index in {@code argObj.dataArray}
+    *                                           containing the last object in the desired subset
+    * @return                                   an Array consisting of the keys in {@code argObj.data} that
+    *                                           were left unprocessed by, or did not key anything in the target
+    *                                           storage facility of, the most recently executed sub-retrieval
     */
     function getAbsentDataKeys(onePastProcessedKeySubsetEnd)
     {
-        var absentDataKeysArray = [];
-        var dataArray = argObj.data;
+            var absentDataKeysArray = [];
+            var dataArray = argObj.data;
 
-        //Loop through the keys in dataArray processed during the last retrieval operation, 
-        //pushing those on to absentDataKeysArray that don't map to meaningful values
-        for(var i = 0; i < onePastProcessedKeySubsetEnd; i++)
-        {
-            var currentKey = dataArray[i];
-            var currentValue = resultDataObj[currentKey];
+            //Loop through the keys in dataArray processed during the last retrieval operation, 
+            //pushing those on to absentDataKeysArray that don't map to meaningful values
+            for(var i = 0; i < onePastProcessedKeySubsetEnd; i++)
+            {
+                    var currentKey = dataArray[i];
+                    var currentValue = resultDataObj[currentKey];
 
-            if(currentValue === null) absentDataKeysArray.push(currentKey);
-        }
-        /////
+                    if(currentValue === null) absentDataKeysArray.push(currentKey);
+            }
+            /////
 
-        return absentDataKeysArray;
+            return absentDataKeysArray;
     }
 
-   /**
+/**
     * Reconstitues the array of keys contained in each object in {@code regenerationArgObjArray} to consist
     * of objects each possessing a key in the array and the value it keys in {@code keyValuePairsObj}. 
     * Keys which do not appear in {@code keyValuePairsObj} are not represented by objects in the reconstituted array.
     */
     function createRegenerationDataItemObjects()
     {
-        //Loop through the objects in regenerationArgObjArray, inserting in to the array contained in each,  
-        //data item objects for the unprocessed & absent keys in the array which appear in keyValuePairsObj.
-        var setArgObjCount = regenerationArgObjArray.length;
-        for(var i = 0; i < setArgObjCount; i++)
-        {
-            var currentDataArray = regenerationArgObjArray[i].data;
-            var pivotIndex = 0;		//will mark one past the index of the last unprocessed/absent key that was replaced by a data item object
-
-            //Loop through the keys in currentDataArray, inserting a data item object for each which maps to
-            //a value in keyValuePairsObj at pivotIndex (a key without a mapping in keyValuePairsObj will be
-            //overwitten by the data item object corresponding to the first key after it which does)
-            var currentDataCount = currentDataArray.length;
-            for(var j = 0; j < currentDataCount; j++)
+            //Loop through the objects in regenerationArgObjArray, inserting in to the array contained in each,  
+            //data item objects for the unprocessed & absent keys in the array which appear in keyValuePairsObj.
+            var setArgObjCount = regenerationArgObjArray.length;
+            for(var i = 0; i < setArgObjCount; i++)
             {
-                var currentKey = currentDataArray[j];
-                var wasKeyProcessed = resultDataObj.hasOwnProperty(currentKey);
-                
-                var currentValue = resultDataObj[currentKey];
+                    var currentDataArray = regenerationArgObjArray[i].data;
+                    var pivotIndex = 0;		//will mark one past the index of the last unprocessed/absent key that was replaced by a data item object
 
-                if(wasKeyProcessed && currentValue !== null)
-                    currentDataArray[pivotIndex++] = {key: currentKey, value: currentValue};
+                    //Loop through the keys in currentDataArray, inserting a data item object for each which maps to
+                    //a value in keyValuePairsObj at pivotIndex (a key without a mapping in keyValuePairsObj will be
+                    //overwitten by the data item object corresponding to the first key after it which does)
+                    var currentDataCount = currentDataArray.length;
+                    for(var j = 0; j < currentDataCount; j++)
+                    {
+                            var currentKey = currentDataArray[j];
+                            var wasKeyProcessed = resultDataObj.hasOwnProperty(currentKey);
+
+                            var currentValue = resultDataObj[currentKey];
+
+                            if(wasKeyProcessed && currentValue !== null)
+                                    currentDataArray[pivotIndex++] = {key: currentKey, value: currentValue};
+                    }
+                    /////
+
+                    if(pivotIndex > 0)
+                            currentDataArray.splice(pivotIndex, currentDataCount - pivotIndex);		//remove the elements in currentDataArray which aren't data item objects
+                    else
+                            regenerationArgObjArray.splice(i, 1);
             }
             /////
-
-            if(pivotIndex > 0)
-                currentDataArray.splice(pivotIndex, currentDataCount - pivotIndex);		//remove the elements in currentDataArray which aren't data item objects
-            else
-                regenerationArgObjArray.splice(i, 1);
-        }
-        /////
     }
 
-   /**
+/**
     * Commences a set operation using the next object to be processed in {@code regenerationArgObjArray}.
     */
     function regenerateData()
     {
-        if(j++ < regenerationArgObjArray.length)
-        {
-            regenerationArgObjArray[j].functions = regenerationFunctionsObj;
-            regenerationArgObjArray[j].complete = regenerateData;	//Designate this function to execute after the conclusion of the set operation
-            set(regenerationArgObjArray[j]);
-        }
+            if(j++ < regenerationArgObjArray.length)
+            {
+                    regenerationArgObjArray[j].functions = regenerationFunctionsObj;
+                    regenerationArgObjArray[j].complete = regenerateData;	//Designate this function to execute after the conclusion of the set operation
+                    set(regenerationArgObjArray[j]);
+            }
     }
 
     /**
     * Progresses the execution of the set of to-be-conducted get operations after the conclusion of one.
 
     * @param currentProcessedItemCount      an int denoting the number of items in {@code argObj.data} processed by the invoking get sub-operation
-    * * @param retrievedKeyValuePairsObj    an object containing mappings each consisting of a key in {@code argObj.data} and the value it keys
-                                            in the currently processing storage facility (which is the setting of the invoking get sub-operation
+    * @param retrievedKeyValuePairsObj      an object containing mappings each consisting of a key in {@code argObj.data} and the value it keys
+                                                                                    in the currently processing storage facility (which is the setting of the invoking get sub-operation
     * @param error                          (optional) the DOMError spawned by the invoking get sub-operation
     */
     function complete(currentProcessedItemCount, retrievedKeyValuePairsObj, error)
     {
-        var currentKeyValuePairsObj;
-        
-        if(!conductDisjointly)
-        {
-            //Extract the keys in argObj.dataArray that did not key anything 
-            //in the storage facility that was the target of the invoking sub-retrieval
-            var absentDataKeysArray = getAbsentDataKeys(currentProcessedItemCount);
+            var currentKeyValuePairsObj;
 
-            //Reassign the operation's key array to an array which contains the keys that
-            //were unprocessed or deemed absent by the invoking sub-retrieval            
-            argObj.data = Array.prototype.splice.apply(argObj.data, [0, currentProcessedItemCount].concat(absentDataKeysArray)); 
-
-            //If absent data is to be regenerated, push an object containing relevant data from the invoking 
-            //sub-retrieval on to regenerationArgObjArray that will be used to accomplish this (after further processing) 
-            if(regenerate && absentDataKeysArray.length > 0)
-                regenerationArgObjArray.push({storageTypes: [currentStorageType], data: absentDataKeysArray});
-
-            currentKeyValuePairsObj = resultDataObj;
-        }
-        else
-            currentKeyValuePairsObj = resultDataObj[currentStorageType] = {};
-
-        //Copy the key-value pairs created by the invoking sub-retrieval to currentKeyValuePairsObj
-        copyObjectProperties(currentKeyValuePairsObj, [retrievedKeyValuePairsObj]);
-        
-        //If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
-        if(error) byStorageTypeErrorObj[currentStorageType] = error;
-
-        var canConclude = (++i >= storageTypeCount || argObj.data.length === 0);
-
-        if(canConclude)
-        {
-            if(argObj.complete) argObj.complete(totalProcessedItemCount, resultDataObj, byStorageTypeErrorObj);
-
-            if(regenerate)
+            if(!conductDisjointly)
             {
-                createRegenerationDataItemObjects();
-                regenerateData();
+                    //Extract the keys in argObj.dataArray that did not key anything 
+                    //in the storage facility that was the target of the invoking sub-retrieval
+                    var absentDataKeysArray = getAbsentDataKeys(currentProcessedItemCount);
+
+                    //Reconstitute the operation's key array as that which contains the keys 
+                    //that were unprocessed or deemed absent by the invoking sub-retrieval            
+                    Array.prototype.splice.apply(argObj.data, [0, currentProcessedItemCount]).concat(absentDataKeysArray); 
+
+                    //If absent data is to be regenerated, push an object containing relevant data from the invoking 
+                    //sub-retrieval on to regenerationArgObjArray that will be used to accomplish this (after further processing) 
+                    if(regenerate && absentDataKeysArray.length > 0)
+                    {
+                        var regenerationOptionsObj = {};
+                        regenerationOptionsObj[currentStorageType] = argObj.options[currentStorageType];
+
+                        regenerationArgObjArray.push({data: absentDataKeysArray, storageTypes: [currentStorageType], options: regenerationOptionsObj});
+                    }
+
+                    currentKeyValuePairsObj = resultDataObj;
             }
-        }
-        else
-        {
-            currentStorageType = argObj.storageTypes[i];
-            conductStorageOperation("get", currentStorageType, argObj, complete);
-        }
+            else
+                    currentKeyValuePairsObj = resultDataObj[currentStorageType] = {};
+
+            //Copy the key-value pairs created by the invoking sub-retrieval to currentKeyValuePairsObj
+            copyObjectProperties(currentKeyValuePairsObj, [retrievedKeyValuePairsObj]);
+
+            //If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
+            if(error) byStorageTypeErrorObj[currentStorageType] = error;
+
+            var canConclude = (++i >= storageTypeCount || argObj.data.length === 0);
+
+            if(canConclude)
+            {
+                    if(argObj.complete) argObj.complete(resultDataObj, byStorageTypeErrorObj);
+
+                    if(regenerate)
+                    {
+                            createRegenerationDataItemObjects();
+                            regenerateData();
+                    }
+            }
+            else
+            {
+                    currentStorageType = argObj.storageTypes[i];
+                    conductStorageOperation("get", currentStorageType, argObj, complete);
+            }
     }
 
     conductStorageOperation("get", currentStorageType, argObj, complete);
@@ -876,7 +918,7 @@ function remove(argObj)
     //in each of the storage facilities in argObj.storageTypes
     var i = 0;
 
-    var byStorageTypeRemovedItemKeysObj = {};
+    var byStorageTypeRemovedItemCountObj = {};
     var byStorageTypeErrorObj = {};
     var expirationDataCollectionArray = [];
 
@@ -887,12 +929,11 @@ function remove(argObj)
 
     var storageTypeCount = argObj.storageTypes.length;
     var currentStorageType = argObj.storageTypes[i];
-    var keyCount = argObj.data.length;
 
     var storageOperationOptionsObj = procureOperationOptions("remove", argObj.options);
     var removeExpirationDataBool = storageOperationOptionsObj.removeExpirationData;
 
-   /**
+/**
     * Creates an object that can be used to remove the expiration data
     * of stored items removed by the most recent removal sub-operation.
 
@@ -902,56 +943,58 @@ function remove(argObj)
     *                               array of objects each containing the key of a data item removed by the most
     *                               recent removal sub-operation and a string of the item's former location data
     */
-    function createExpirationDataObject(onePastSubsetEnd)
+    function createItemIdentificationCentricExpirationDataCollection(onePastSubsetEnd)
     {
-        var expirationDataObjArray = [];
-        var dataArray = argObj.data;
+            var expirationDataObjArray = [];
+            var dataArray = argObj.data;
 
-        //Create a String containing data that describes the location of items in currentStorageType keyed by the Strings in dataArray 
-        var storageTypeOptionsObj = procureStorageTypeOptions(defaultStorageTypeOptionsObj[currentStorageType], argObj.options[currentStorageType]);
-        var locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
-        /////
+            var currentStorageMetatype = procureStorageMetatype(currentStorageType);
 
-        //Loop through the keys in the sub-array of dataArray bounded by [0, onePastSubsetEnd), pushing
-        //on to expirationDataObjArray an object for each key consisting of it (the key) and locationStr
-        for(var i = 0; i < onePastSubsetEnd; i++)
-            expirationDataObjArray.push({key: dataArray[i], locationData: locationDataStr});
-        /////
+            //Create a String containing data that describes the location of items in currentStorageType keyed by the Strings in dataArray 
+            var storageTypeOptionsObj = procureStorageTypeOptions(currentStorageType, argObj.options[currentStorageType]);
+            var serializedLocationData = storageOperationFuncObj[currentStorageMetatype].serializeLocationData(storageTypeOptionsObj);
+            /////
 
-        return {storageType: currentStorageType, dataArray: expirationDataObjArray};
+            //Loop through the keys in the sub-array of dataArray bounded by [0, onePastSubsetEnd), pushing on to
+            //expirationDataObjArray an object for each key consisting of it (the key) and serializedLocationData
+            for(var i = 0; i < onePastSubsetEnd; i++)
+                    expirationDataObjArray.push({key: dataArray[i], serializedLocationData: serializedLocationData});
+            /////
+
+            return {storageType: currentStorageType, dataArray: expirationDataObjArray};
     }
 
-   /**
+/**
     * Progresses the execution of the set of to-be-conducted remove operations after the conclusion of one.
 
-    * @param processedItemCount		an int denoting the number of keys in dataObj.data processed by the invoking removal sub-operation
-    * @param error                      (optional) the DOMError spawned by the invoking removal sub-operation
+    * @param processedItemCount		an int denoting the number of keys in dataObj.data processed by the invoking remove sub-operation
+    * @param error                  (optional) the DOMError spawned by the invoking remove sub-operation
     */
     function complete(processedItemCount, error)
     {
-        //Map the currently relevant storage type to the keys of the items removed by the invoking sub-removal
-        byStorageTypeRemovedItemKeysObj[currentStorageType] = (processedItemCount === keyCount ? argObj.data : argObj.data.slice(0, processedItemCount));
-        
-        //If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
-        if(error) byStorageTypeErrorObj[currentStorageType] = error;
+            //Map the currently relevant storage type to the number of items removed by the invoking sub-removal
+            byStorageTypeRemovedItemCountObj[currentStorageType] = processedItemCount;
 
-        //If related expiration data is to be removed, push an object on to expirationDataCollectionArray 
-        //that will be used by removeExpirationData() to itentify and remove such data 
-        if(removeExpirationDataBool && processedItemCount > 0) 
-            expirationDataCollectionArray.push(createExpirationDataCollection(processedItemCount));
+            //If an error was spawned by the invoking sub-operation, associate it with the currently relevant storage type in byStorageTypeErrorObj
+            if(error) byStorageTypeErrorObj[currentStorageType] = error;
 
-        var canConclude = (++i >= storageTypeCount);
+            //If related expiration data is to be removed, push an object on to expirationDataCollectionArray 
+            //that will be used by removeExpirationData() to itentify and remove such data 
+            if(removeExpirationDataBool && processedItemCount > 0) 
+                    expirationDataCollectionArray.push(createItemIdentificationCentricExpirationDataCollection(processedItemCount));
 
-        if(canConclude)
-        {
-            if(argObj.complete)                                 argObj.complete(byStorageTypeRemovedItemKeysObj, byStorageTypeErrorObj);
-            if(expirationDataCollectionArray.length > 0)        removeExpirationData(expirationDataCollectionArray);
-        }
-        else
-        {
-            currentStorageType = argObj.storageTypes[i];
-            conductStorageOperation("remove", currentStorageType, argObj, complete);
-        }
+            var canConclude = (++i >= storageTypeCount);
+
+            if(canConclude)
+            {
+                    if(argObj.complete)                                 argObj.complete(byStorageTypeRemovedItemCountObj, byStorageTypeErrorObj);
+                    if(expirationDataCollectionArray.length > 0)        removeExpirationData(expirationDataCollectionArray);
+            }
+            else
+            {
+                    currentStorageType = argObj.storageTypes[i];
+                    conductStorageOperation("remove", currentStorageType, argObj, complete);
+            }
     }
 
     conductStorageOperation("remove", currentStorageType, argObj, complete);
@@ -976,7 +1019,7 @@ function removeAll_createExpirationDataObjectExternal(currentStorageType, argObj
 
     //Create a String containing data that describes the location of items in currentStorageType keyed by the elements in keyArray 
     var storageTypeOptionsObj = procureStorageTypeOptions(defaultStorageTypeOptionsObj[currentStorageType], argObj.options[currentStorageType]);
-    var locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+    var serializedLocationData = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
     /////
 
     var isFileSystemType = (currentStorageType === "fileSystem" || (currentStorageType === "silverlight"
@@ -1005,16 +1048,16 @@ function removeAll_createExpirationDataObjectExternal(currentStorageType, argObj
                                                     : "/");
             /////
 
-            //Utilize dataItemParentDirectoryPath to help create and assign to locationDataStr, a string which   
+            //Utilize dataItemParentDirectoryPath to help create and assign to serializedLocationData, a string which   
             //contains data specifying the location of the data item identified by the currently processing key
             storageTypeOptionsObj.directoryPath = dataItemParentDirectoryPath;
-            locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+            serializedLocationData = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
             /////
 
-            expirationDataObj = {key: dataItemName, locationData: locationDataStr};
+            expirationDataObj = {key: dataItemName, serializedLocationData: serializedLocationData};
         }
         else
-            expirationDataObj = {key: keyArray[i], locationData: locationDataStr};	
+            expirationDataObj = {key: keyArray[i], serializedLocationData: serializedLocationData};	
 
         expirationDataObjArray.push(expirationDataObj);
     }
@@ -1078,7 +1121,7 @@ function getOrRemoveAll(operationType, argObj)
 
         //Create a String containing data that describes the location of items in currentStorageType keyed by the elements in keyArray 
         var storageTypeOptionsObj = procureStorageTypeOptions(defaultStorageTypeOptionsObj[currentStorageType], argObj.options[currentStorageType]);
-        var locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+        var serializedLocationData = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
         /////
 
         var isFileSystemType = (currentStorageType === "fileSystem" || (currentStorageType === "silverlight"
@@ -1107,16 +1150,16 @@ function getOrRemoveAll(operationType, argObj)
                                                         : "/");
                 /////
 
-                //Utilize dataItemParentDirectoryPath to help create and assign to locationDataStr, a string which   
+                //Utilize dataItemParentDirectoryPath to help create and assign to serializedLocationData, a string which   
                 //contains data specifying the location of the data item identified by the currently processing key
                 storageTypeOptionsObj.directoryPath = dataItemParentDirectoryPath;
-                locationDataStr = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
+                serializedLocationData = storageOperationFuncObj[currentStorageType].serializeLocationData(storageTypeOptionsObj);
                 /////
 
-                expirationDataObj = {key: dataItemName, locationData: locationDataStr};
+                expirationDataObj = {key: dataItemName, serializedLocationData: serializedLocationData};
             }
             else
-                expirationDataObj = {key: keyArray[i], locationData: locationDataStr};	
+                expirationDataObj = {key: keyArray[i], serializedLocationData: serializedLocationData};	
 
             expirationDataObjArray.push(expirationDataObj);
         }
@@ -1393,17 +1436,17 @@ var testArr = [testNum, testNumObj, testStr, testDateObj, testObj];
 (function(){
     var testDataObjArray = [
         {storageType: "cookie", argObj: {data: []}, onePastSubsetEnd: 0, expectedResultObj: null},
-        {storageType: "userData", argObj: {data: [{key: 1, value: 1, expirationTime: 1}, {key: 2, value: 2, expirationTime: 2}]},
+        {storageType: "userData", argObj: {data: [{key: 1, value: 1, expirationTimeMillis: 1}, {key: 2, value: 2, expirationTimeMillis: 2}]},
             onePastSubsetEnd: 0, expectedResultObj: null},
-        {storageType: "localStorage", argObj: {data:[{key: 1, value: 1, expirationTime: 1}, {key: 2, value: 2, expirationTime: 2}]}, 
-            onePastSubsetEnd: 1, expectedResultObj: {storageType: "localStorage", dataArray: [{key: 1, expirationTime: 1, locationData: undefined}]}},
-        {storageType: "webSQL", argObj: {data:[{key: 1, value: 1}, {key: 2, value: 2, expirationTime: 2}]},
-            onePastSubsetEnd: 2, expectedResultObj: {storageType: "webSQL", dataArray: [{key: 2, expirationTime: 2, locationData: undefined}]}},
-        {storageType: "indexedDB", argObj: {data:[{key: 1, value: 1, expirationTime: 1}, {key: 2, value: 2}]}, 
-            onePastSubsetEnd: 2, expectedResultObj: {storageType: "indexedDB", dataArray: [{key: 1, expirationTime: 1, locationData: undefined}]}},
-        {storageType: "fileSystem", argObj: {data:[{key: 1, value: 1, expirationTime: 1}, {key: 2, value: 2, expirationTime: 2}]}, 
-            onePastSubsetEnd: 2, expectedResultObj: {storageType: "fileSystem", dataArray: [{key: 1, expirationTime: 1, locationData: undefined},
-                                                     {key: 2, expirationTime: 2, locationData: undefined}]}}
+        {storageType: "localStorage", argObj: {data:[{key: 1, value: 1, expirationTimeMillis: 1}, {key: 2, value: 2, expirationTimeMillis: 2}]}, 
+            onePastSubsetEnd: 1, expectedResultObj: {storageType: "localStorage", dataArray: [{key: 1, expirationTimeMillis: 1, serializedLocationData: undefined}]}},
+        {storageType: "webSQL", argObj: {data:[{key: 1, value: 1}, {key: 2, value: 2, expirationTimeMillis: 2}]},
+            onePastSubsetEnd: 2, expectedResultObj: {storageType: "webSQL", dataArray: [{key: 2, expirationTimeMillis: 2, serializedLocationData: undefined}]}},
+        {storageType: "indexedDB", argObj: {data:[{key: 1, value: 1, expirationTimeMillis: 1}, {key: 2, value: 2}]}, 
+            onePastSubsetEnd: 2, expectedResultObj: {storageType: "indexedDB", dataArray: [{key: 1, expirationTimeMillis: 1, serializedLocationData: undefined}]}},
+        {storageType: "fileSystem", argObj: {data:[{key: 1, value: 1, expirationTimeMillis: 1}, {key: 2, value: 2, expirationTimeMillis: 2}]}, 
+            onePastSubsetEnd: 2, expectedResultObj: {storageType: "fileSystem", dataArray: [{key: 1, expirationTimeMillis: 1, serializedLocationData: undefined},
+                                                     {key: 2, expirationTimeMillis: 2, serializedLocationData: undefined}]}}
     ]
     
     var procureDataItemIdentifyingEntityStub = function(dataItemObj, storageType, storageTypeOptionsObj){return dataItemObj.key;}
@@ -1484,7 +1527,7 @@ var testArr = [testNum, testNumObj, testStr, testDateObj, testObj];
     storageOperationStubFuncCollectionObj.serializeLocationData = function(optionsObj){
         var str = ""; 
         for(var property in optionsObj)
-            str += (str === "" ? "" : ".") + property + ":" + optionsObj[property];
+            str += (str === "" ? "" : ";") + property + ":" + optionsObj[property];
 
         return str;
     }
@@ -1519,7 +1562,7 @@ var testArr = [testNum, testNumObj, testStr, testDateObj, testObj];
                     var directoryPath = currentKey.substring(0, currentKey.indexOf(currentExpirationDataObj.key));
                     if(directoryPath === "") directoryPath = "/" + directoryPath;
                     
-                    assert.ok(currentExpirationDataObj.locationData.indexOf("directoryPath:" + directoryPath) !== -1, "storageType: " + storageType + "\ndirectoryPath: " + directoryPath + "\nkey: " + currentExpirationDataObj.key);
+                    assert.ok(currentExpirationDataObj.serializedLocationData.indexOf("directoryPath:" + directoryPath) !== -1, "storageType: " + storageType + "\ndirectoryPath: " + directoryPath + "\nkey: " + currentExpirationDataObj.key);
                 }
             }
         } 

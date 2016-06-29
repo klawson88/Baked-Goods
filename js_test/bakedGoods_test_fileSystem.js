@@ -1,3 +1,11 @@
+/*
+ * The test runners in this file should be executed independant of one another (in other words, 
+ * only one runner should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+
 /**
 * Creates all the components named in a (HTML5) file system directory path that do not currently exist.
 
@@ -77,7 +85,7 @@ function fileSystem_executeStorageOperation(optionsObj, storageOperationFunc, ac
     if(!requestFileSystem){ accessErrorCompleteFunc(); return;}	
     /////
 
-    var quotaManagementObj = window.webkitStorageInfo;
+    var quotaManagementObj = (optionsObj.storageType === Window.PERSISTENT ? navigator.webkitPersistentStorage : navigator.webkitTemporaryStorage);
 
     var rootDirectoryEntry;
 
@@ -134,11 +142,11 @@ function fileSystem_executeStorageOperation(optionsObj, storageOperationFunc, ac
 
     //If we have to request a storage quota before we can request a file system, reassign accessFunc to a
     //function which requests the quota and calls the original accessFunc upon the success of the request
-    if(quotaManagementObj && optionsObj.storageType === window.PERSISTENT)
+    if(quotaManagementObj === navigator.webkitPersistentStorage)
     {
         var subAccessFunc = accessFunc;
         accessFunc = function(quotaByteSize){
-             quotaManagementObj.requestQuota(optionsObj.storageType, quotaByteSize, subAccessFunc, accessErrorCompleteFunc);
+             quotaManagementObj.requestQuota(quotaByteSize, subAccessFunc, accessErrorCompleteFunc);
         };
     }
     /////
@@ -940,7 +948,7 @@ function clear(pertinentOptionsObj)
 	
 	
 /*
-//realizeDirectoryPath test 
+//realizeDirectoryPath test runner
 (function(){
 
     var realizeDirectoryPathTestDataObj = {
@@ -992,7 +1000,7 @@ function clear(pertinentOptionsObj)
 	
 	
 /*
-//handleDirectoryAccessError test
+//handleDirectoryAccessError test runner
 (function(){
     var handleDirectoryAccessErrorTestDataObjArray = [
         {path:"dir1/dir2/dir3/dir4/", expectedPathComponentArray: ["dir1", "dir2", "dir3", "dir4"]},
@@ -1039,7 +1047,7 @@ function clear(pertinentOptionsObj)
 */
 	
 /*
-//fileSystem_executeStorageOperation test
+//fileSystem_executeStorageOperation test runner
 (function(){
 
     var quotaByteSize = 1024 * 1024;
@@ -1114,8 +1122,8 @@ function clear(pertinentOptionsObj)
 */
 
 
-
-//fileSystem_set test
+/*
+//fileSystem_set test runner
 (function(){
 
     var isBlobConstructorPresent = !!window.Blob;
@@ -1234,9 +1242,11 @@ function clear(pertinentOptionsObj)
 
     QUnit.asyncTest("fileSystem_set", testFunc);
 })()
+*/
 
-
-
+//This function primes the storage facility for the get, remove, get_all,
+//and remove_all tests runners; as such, this function must be visible 
+//(i.e uncommented) at the time any of those tests are to be run
 function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOptionsObj)
 {
     var isBlobConstructorPresent = !!window.Blob;
@@ -1300,8 +1310,11 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
         
         currentTestDataObjOptionsObj = testDataObjArray[currentTestDataObjIndex].options;
         currentTestDataItemObjIndex = 0;
+        
+        var directoryPath = currentTestDataObjOptionsObj.directoryPath;
+        var isDirectoryPathToRoot = (directoryPath === "/" || directoryPath === "\\" || directoryPath === null || directoryPath === undefined);
 
-        if(currentTestDataObjOptionsObj.directoryPath !== null)
+        if(!isDirectoryPathToRoot)
             locusDirectoryEntry.getDirectory(currentTestDataObjOptionsObj.directoryPath,{create: true, exclusive: false}, procureFileFunc);
         else
             procureFileFunc(locusDirectoryEntry);
@@ -1314,7 +1327,11 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
 
 
 /*
-//filesystem_get test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//filesystem_get test runner
 (function(){
 
     var testFunc = function(assert){
@@ -1373,7 +1390,11 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
 
 	
 /*
-//fileSystem_remove
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//fileSystem_remove test runner
 (function(){
 
     var testFunc = function(assert){
@@ -1431,7 +1452,11 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
 
 
 /*
-//fileSystem_getAll test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//fileSystem_getAll test runner
 (function(){
     var testSpecificOptionsObj = {
 
@@ -1449,6 +1474,8 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
         removeDirectories: false,
         removeTargetDirectory: false
     }
+    
+    var TypedArray = Object.getPrototypeOf(Int8Array.prototype).constructor;
     
     var currentTestDataObjIndex = testDataObjArray.length - 1;
     var currentTestDataObj;
@@ -1475,24 +1502,29 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
                 
                 var keyDataObjPairsObj = {};
                 var expectedDataItemSetSize = 0;
+                
+                var currentTestDataObjDirectoryPath = currentTestDataObj.options.directoryPath;
  
-                var testDataObjSetStartIndex = (currentTestDataObj.options.recursive ? testDataObjArray.length - 1 : currentTestDataObjIndex);
-                for(var i = testDataObjSetStartIndex; i >= currentTestDataObjIndex; i--)
+                var checkTestDataObjSetStartIndex = (currentTestDataObj.options.recursive ? testDataObjArray.length - 1 : currentTestDataObjIndex);
+                for(var i = checkTestDataObjSetStartIndex; i >= currentTestDataObjIndex; i--)
                 {
-                    var directoryPath =  "/";
-
-                    var currentTestDataItemObjArray = testDataObjArray[i].testDataItemObjArray;
+                    var currentCheckTestDataObj = testDataObjArray[i];
+                    var currentCheckTestDataObjDirectoryPath = currentCheckTestDataObj.options.directoryPath;
                     
-                    for(var j = 0; j < currentTestDataItemObjArray.length; j++)
+                    if(currentCheckTestDataObjDirectoryPath.indexOf(currentTestDataObjDirectoryPath) == 0)
                     {
-                        var currentTestDataItemObj = currentTestDataItemObjArray[j];
+                        var currentCheckTestDataItemObjArray = currentCheckTestDataObj.testDataItemObjArray;
                         
-                        var qualifiedKey = directoryPath + currentTestDataItemObj.key;
-                        keyDataObjPairsObj[qualifiedKey] = currentTestDataItemObj;   
-                        
-                        if(directoryPath.indexOf(currentTestDataObj.options.directoryPath) === 0)
+                        for(var j = 0; j < currentCheckTestDataItemObjArray.length; j++)
+                        {
+                            var currentTestDataItemObj = currentCheckTestDataItemObjArray[j];
+
+                            var qualifiedKey = currentCheckTestDataObjDirectoryPath + currentTestDataItemObj.key;
+                            keyDataObjPairsObj[qualifiedKey] = currentTestDataItemObj;   
+                            
                             expectedDataItemSetSize++;
-                    }            
+                        }
+                    }
                 }
 
                 for(var i = 0; i < dataItemObjArray.length; i++)
@@ -1506,7 +1538,7 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
                     {
                         var expectedValue = keyDataObjPairsObj[currentRetrievedDataItemKey].value;
                         
-                        if(expectedValue.hasOwnProperty("buffer"))
+                        if(expectedValue instanceof TypedArray)
                         {
                             var arrayBufferStr = ""
                             for(var j = 0; j < expectedValue.length; j++)
@@ -1527,7 +1559,7 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
 
             var copyCurrentTestDataSetOptions = function(recipientObj, donorObj){
             
-                var pertinentPropertiesArray = ["directoryPath", "recursive","removeDirectories", "removeTargetDirectory"];
+                var pertinentPropertiesArray = ["directoryPath", "recursive", "removeDirectories", "removeTargetDirectory"];
 
                 for(var i = 0; i < pertinentPropertiesArray.length; i++)
                 {
@@ -1552,8 +1584,12 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
 
 
         
-/*
-//fileSystem_removeAll test
+
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//fileSystem_removeAll test runner
 (function(){
     
     var testSpecificOptionsObj = {
@@ -1735,4 +1771,3 @@ function setupGetOrRemoveTest(locusDirectoryEntry, successFunc, testSpecificOpti
 
     QUnit.asyncTest("fileSystem_removeAll", testFunc);
 })()
-*/

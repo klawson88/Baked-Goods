@@ -1,3 +1,19 @@
+/*
+ * IMPORTANT
+ * The variables and functions in this file make use of those defined in bakedGoods_test_externalStorageOperationUtilities.js,
+ * as such, the variables and functions in that file must be visible to those in this file in order for those in this file to 
+ * be defined and/or function as expected; such a relationship between the two files can be established by say, referencing that
+ * file before this file in the html page in which the tests in this file are to be run.
+ */
+
+/*
+ * The tests in this file should be run independant of one another (in other words, only 
+ * one test should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+
 externalFileAssocAssetsWrapperObj.silverlight = createExternalFileAssociatedAssetsObj(3, silverlight_isSupportingVersionInstalled);
 
 
@@ -265,7 +281,7 @@ function silverlight_removeAll(exprStr, optionsObj, complete)
 
 var optionsObj = {
     
-    xapPath: "ext_apps/BakedGoods.xap",
+    xapPath: "ext_bin/BakedGoods.xap",
 			
     storeScope: "site",
     conduitClass: "IsolatedStorageSettings",
@@ -340,13 +356,12 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
     
     window.bakedGoods_changeExternalFileStatus = stubLoadCompleteWrapper;
     failTimeoutID = setTimeout(failFuncWrapper, timeoutMilliseconds);
-    silverlight_createDOMElement(optionsObj);
-    
+    externalFileAssocAssetsWrapperObj.silverlight.domElement = silverlight_createDOMElement(optionsObj);
 }
 */
 
 /*
-//silverlight_createDOMElement test
+//silverlight_createDOMElement test runner
 (function(){
    
     var testFunc = function(assert){
@@ -362,16 +377,17 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
 
 
 /*
-//silverlight_isSupportingVersionInstalled test
+//silverlight_isSupportingVersionInstalled test runner
 (function(){
     
     var testFunc = function(assert){
         
         var stubLoadComplete = function(){
+			
+			var silverlight_domElement = externalFileAssocAssetsWrapperObj.silverlight.domElement;
             
             var maxVersionNum = 10;
-            
-
+			
             for(var i = 0; i < maxVersionNum; i++)
             {
                 var actualSupportStatus = silverlight_isSupportingVersionInstalled(i);
@@ -381,7 +397,7 @@ function setupPrecursoryActionTest(stubLoadComplete, failFunc)
             }
         }
         
-        var failFunc = function(){assert.ok(false, "Unable to load silverlight application."); testCompleteFunc();}
+        var failFunc = function(){assert.ok(false, "Unable to load silverlight application.");}
         
         setupPrecursoryActionTest(stubLoadComplete, failFunc);
     }
@@ -417,20 +433,20 @@ var issTestOptionsObj = {
     storeScope: "site",
     conduitClass: "IsolatedStorageSettings",
 
-    xapPath: "ext_apps/BakedGoods.xap",
+    xapPath: "ext_bin/BakedGoods.xap",
     elementParent: document.body,
     elementStyle: "visibility:none;position:absolute;left:0;top:0;width:1px;height1px;"
 };
 
 
 /*
-//silverlight_set && silverlight_get (iss) test
+//silverlight_set && silverlight_get (iss) test runner
 (function(){
 
     var testFunc = function(assert){
         
         var testCompleteFunc = function(){
-            clear();
+            clear(issTestOptionsObj.storeScope);
             QUnit.start();
         }
         
@@ -464,7 +480,7 @@ var issTestOptionsObj = {
 */
 
 /*
-//silverlight_remove (iss) test
+//silverlight_remove (iss) test runner
 (function(){
 
     var testFunc = function(assert){
@@ -474,7 +490,7 @@ var issTestOptionsObj = {
         var removedItemCount;
         
         var testCompleteFunc = function(){
-            clear();
+            clear(issTestOptionsObj.storeScope);
             QUnit.start();
         }
             
@@ -513,7 +529,7 @@ var issTestOptionsObj = {
 */
 
 /*
-//silverlight_getAll
+//silverlight_getAll (iss) test runner
 (function(){
     
     var filterDataObjArray = [
@@ -533,7 +549,7 @@ var issTestOptionsObj = {
             
             if(++processingIndex >= filterDataObjArray.length)
             {
-                clear();
+                clear(issTestOptionsObj.storeScope);
                 QUnit.start();
             }
             else
@@ -571,7 +587,7 @@ var issTestOptionsObj = {
 
 
 /*
-//silverlight_removeAll (iss)
+//silverlight_removeAll (iss) test runner
 (function(){
     
     var filterDataObjArray = [
@@ -589,7 +605,7 @@ var issTestOptionsObj = {
         var testCompleteFunc = function(){
             if(++processingIndex >= filterDataObjArray.length)
             {
-                clear();
+                clear(issTestOptionsObj.storeScope);
                 QUnit.start();
             }
             else
@@ -754,12 +770,12 @@ var testDataObjArray = [
 
 
 /*
-//silverlight_set test (isf)
+//silverlight_set (isf) test runner
 (function(){
     
     var testSpecificOptionsObj = {
         
-        xapPath: "ext_apps/BakedGoods.xap",
+        xapPath: "ext_bin/BakedGoods.xap",
 			
         storeScope: "site",
         conduitClass: "IsolatedStorageFile",
@@ -851,7 +867,9 @@ var testDataObjArray = [
 })()
 */
 
-
+//This function primes the storage facility for the get, remove, get_all,
+//and remove_all isf tests runners; as such, this function must be visible 
+//(i.e uncommented) at the time any of those tests are to be run
 function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
 {
     var localOptionsObj = (testSpecificOptionsObj ? testSpecificOptionsObj : optionsObj);
@@ -879,9 +897,13 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
 }
 
 
-
+ 
 /*
-//silverlight_get test (isf)
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//silverlight_get (isf) test runner
 (function(){
    
     var testSpecificOptionsObj =  {  
@@ -902,7 +924,7 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
         dataFormat: "text",
         dataEncoding: null,
         
-        xapPath: "ext_apps/BakedGoods.xap",
+        xapPath: "ext_bin/BakedGoods.xap",
         elementParent: document.body,
         elementStyle: "visibility:none;position:absolute;left:0;top:0;width:1px;height1px;"
     }
@@ -971,7 +993,11 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
 
 
 /*
-//silverlight_remove test (isf)
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//silverlight_remove (isf) test runner
 (function(){
     
     var testSpecificOptionsObj =  {  
@@ -992,7 +1018,7 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
         dataFormat: "text",
         dataEncoding: null,
         
-        xapPath: "ext_apps/BakedGoods.xap",
+        xapPath: "ext_bin/BakedGoods.xap",
         elementParent: document.body,
         elementStyle: "visibility:none;position:absolute;left:0;top:0;width:1px;height1px;"
     }
@@ -1042,7 +1068,11 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
 
 
 /*
-//silverlight_getAll test (isf)
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//silverlight_getAll (isf) test runner
 (function(){
     
     var testSpecificOptionsObj =  {  
@@ -1061,7 +1091,7 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
         dataFormat: "text",
         dataEncoding: null,
         
-        xapPath: "ext_apps/BakedGoods.xap",
+        xapPath: "ext_bin/BakedGoods.xap",
         elementParent: document.body,
         elementStyle: "visibility:none;position:absolute;left:0;top:0;width:1px;height1px;"
     }
@@ -1167,8 +1197,11 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
 
 
 
-
-//silverlight_removeAll (isf) test
+//This test runner makes use of data in the storage facility that
+//is created by setupGetOrRemoveTest, and as such requires the 
+//function (i.e uncommented) in order to function as expected
+//
+//silverlight_removeAll (isf) test runner
 (function(){
     
     var testSpecificOptionsObj = {
@@ -1192,7 +1225,7 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
         removeDirectories: false,
         removeTargetDirectory: false,
         
-        xapPath: "ext_apps/BakedGoods.xap",
+        xapPath: "ext_bin/BakedGoods.xap",
         elementParent: document.body,
         elementStyle: "visibility:none;position:absolute;left:0;top:0;width:1px;height1px;"
     }
@@ -1206,7 +1239,7 @@ function setupGetOrRemoveTest(successFunc, testSpecificOptionsObj)
         var testCompleteFunc = function(){
             if(--currentTestDataObjIndex < 0)
             {
-                clear();
+                clear(testSpecificOptionsObj.storeScope);
                 QUnit.start();
             }
             else

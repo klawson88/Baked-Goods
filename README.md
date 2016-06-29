@@ -1,5 +1,5 @@
-##About
-
+About
+=====
 BakedGoods is a comprehensive Javascript library which establishes a uniform interface that can be used to conduct
 common storage operations in ALL native client-side storage facilities introduced before and by HTML5,
 as well as popular external storage facilities, while maintaining the flexibility and options afforded to the user by each.
@@ -28,31 +28,27 @@ Unlike many similar libraries:
 - Data expiration capabilities provided for all storage types
 - Regeneration capabilities provided for all storage types
 
-
-The code well structured, easy to follow, and extensively commented for the 
+The code is well structured, easy to follow, and extensively commented for the 
 benefit of developers seeking to increase familiarity with any of the supported facilities, as 
 well as developers seeking to add homogeneous, functionality-extending code with ease.
 
-##How to use
 
+How to use
+==========
 BakedGoods provides **five** methods that can be used to conduct their namesake storage operations: `set()`, `get()`, `remove()`, `getAll()`, and `removeAll()`. 
 
 All the methods take an object as an argument and utilize 3 properties in it:
 
 - Either:
     - **data** (for `set()`, `get()`, and `remove()`):  An array consisting of data that will be the subject of the storage operation
-             
     - **filter** (for `getAll()` and `removeAll()`):  a String representation of an expression that, when evaluated using an arbitrary data    item, must return true for that item to be subject to the operation (see "conditional operations" for more details)
 - **storageTypes**: An array consisting of Strings denoting the storage facilities the storage operation is to be conducted in
-    
 - **options**: A object containing key-value pairs each consisting of a storage facility named in **storageTypes** and
               an object containing data that will collectively dictate how the storage operation is to be conducted in it
 - **complete**:   A function to be called upon the conclusion of the storage operation
 
-
-###set() 
-
-
+set()
+-----
     //Create objects containing operation preferences for each target storage facility. 
     //These objects, and values defined in them are all optional; BakedGoods provides sensible defaults
     var silverlightOptionsObj = {conduitClass: "IsolatedStorageFile", directoryPath: "/example_files"};
@@ -79,18 +75,16 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		options: optionsObj,
 		
 		//Define a callback to be executed after completion
-		//byStorageTypeStoredKeysObj:   Contains pairings each consisting of a target storage type and
-                                        an array of the keys of items stored in it by the operation
-		//byStorageTypeErrorObj:        Contains pairings each consisting of a storage type in which the 
-                                        foperation ailed and the DOMError representing  the cause
-		complete: function(byStorageTypeStoredKeysObj, byStorageTypeErrorObj){}
+		//byStorageTypeStoredItemRangeDataObj:   Contains pairings each consisting of a target storage type
+        //                                       and an object consisting of the bounds of the range of items in
+        //                                       argObj.data successfully stored in the storage type by this operation
+		//byStorageTypeErrorObj:                 Contains pairings each consisting of a storage type in which the 
+        //                                       operation failed and the DOMError representing  the cause
+		complete: function(byStorageTypeStoredItemRangeDataObj, byStorageTypeErrorObj){}
 	});
-    
 
-	
-	
-	
-###get()
+get()
+-----
     //Without comments
     bakedGoods.get({
 		data: ["key1", "key2"],
@@ -101,7 +95,7 @@ All the methods take an object as an argument and utilize 3 properties in it:
 
     //With comments
 	bakedGoods.get({
-		//Array of Strings keying the desired items
+		//Array containing identifying metadata, and/or objects which contain identifying metadata, of the data items to be retrieved
 		data: ["key1", "key2"],
 		
 		//Array specifying facilities items are located in
@@ -111,18 +105,16 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		options: optionsObj,
 		
 		//Define a callback to be executed after completion
-		//totalProcessedItemCount: Number of items retrieved
-		//resultDataObj: Contains pairings each consisting of a desired key and the item it keys in the first 
-						 target storage facility it maps something in, or null if it wasn't found in any. If the
-						 operation was disjoint, this will contain pairings each consisting of a storage type and
-						 an object containing the data item key-value pairings procured from the it
-		//byStorageTypeErrorObj: See set() example for explanation
-		complete: function(totalProcessedItemCount, resultDataObj, byStorageTypeErrorObj){}
+		//resultDataObj:            Contains pairings each consisting of a desired key and the item it keys in the first 
+		//                          target storage facility it maps something in, or null if it wasn't found in any. If the
+		//                          operation was disjoint, this will contain pairings each consisting of a storage type and
+		//                          an object containing the data item key-value pairings procured from the it
+		//byStorageTypeErrorObj:    See set() example for explanation
+		complete: function(resultDataObj, byStorageTypeErrorObj){}
 	});
 	
-	
-###remove()
-
+remove()
+--------
     //Without comments
     bakedGoods.remove({
 		data: ["key1", "key2"],
@@ -133,7 +125,8 @@ All the methods take an object as an argument and utilize 3 properties in it:
 
     //With comments
     bakedGoods.remove({
-		//Array of Strings keying the items to be removed
+		//Array containing identifying metadata, and/or objects which 
+		//contain identifying metadata, of the data items to be removed
 		data: ["key1", "key2"],
 		
 		//Array specifying facilities items are located in
@@ -144,14 +137,13 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		
 		//Define a callback to be executed after completion
 		//byStorageTypeRemovedItemKeysObj:  Contains pairings each consisting of a target storage type
-                                            and array of keys of items removed by this operation
+        //                                  and array of keys of items removed by this operation
 		//byStorageTypeErrorObj:            See set() example for explanation
 		complete: function(byStorageTypeRemovedItemKeysObj, byStorageTypeErrorObj){}
 	});
 	
-	
-###getAll()
-
+getAll()
+--------
     //Without comments
     bakedGoods.getAll({
 		storageTypes: ["silverlight", "fileSystem"],
@@ -169,15 +161,14 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		options: optionsObj,
 		
 		/Define a callback to be executed after completion
-		//byStorageTypeResultDataObj:       Contains pairings each consisting of a target storage type and an array of all
-										    the data items in it (in the objects of the form {key: _ , value: _})
-		//byStorageTypeErrorObj:            See set() example for explanation
+		//byStorageTypeResultDataObj:   Contains pairings each consisting of a target storage type and an array of all
+		//				                the data items in it (in the objects of the form {key: _ , value: _})
+		//byStorageTypeErrorObj:        See set() example for explanation
 		complete: function(byStorageTypeResultDataObj, byStorageTypeErrorObj){}
 	});
 	
-	
-###removeAll()
-
+removeAll()
+-----------
     //Without comments
     bakedGoods.removeAll({
 		storageTypes: ["silverlight", "fileSystem"],
@@ -196,26 +187,26 @@ All the methods take an object as an argument and utilize 3 properties in it:
 		
 		/Define a callback to be executed after completion
 		//byStorageTypeResultDataObj:   Contains pairings each consisting of a target storage type 
-										and the number of data items in it that were removed
+		//				                and the number of data items in it that were removed
 		//byStorageTypeErrorObj:        See set() example for explanation
 		complete: function(byStorageTypeResultDataObj, byStorageTypeErrorObj){}
 	});
-	
-	
-###removeExpired()
 
-	//You may supply a user-defined function for any storage facility that may
-	//contain expired item. The supplied function will then be used in place of 
-	//the internal to remove the expired items from that particular facility
-	//(see "User-defined storage operation functions" for details)
+removeExpired()
+---------------
+    //You may supply a user-defined function for any storage facility that may
+    //contain expired item. The supplied function will then be used in place of 
+    //the internal to remove the expired items from that particular facility
+    //(see "User-defined storage operation functions" for details)
     bakedGoods.removeExpired();
-	
-###Storage type options
-
+    
+    
+Storage type options
+====================
 Values for any options that a given storage facility exposes can be
 specified through the options object detailed in the above examples.
- 
- The internal object which contains the default values used is shown below:
+
+The internal object which contains the default values used is shown below:
 
 	var defaultStorageTypeOptionsObj = {
 		cookie:{
@@ -236,8 +227,11 @@ specified through the options object detailed in the above examples.
 			databaseDisplayName: "Baked Goods",
 			databaseVersion: "",
 			estimatedDatabaseSize: 1024 * 1024,
-			tableData: {name: "Main", keyColumnName: "key", columnDefinitions: "(key TEXT PRIMARY KEY, value TEXT)"}, 
-			tableIndexDataArray: []
+			tableData: {name: "Main", columnDefinitions: "(key TEXT PRIMARY KEY, value TEXT)", keyColumnName: "key"}, 
+			tableIndexDataArray: [],
+			
+			//Set operation pertinent options
+			setOnlyIfAbsent: false
 		},
 		indexedDB: {
 			databaseName: "Baked_Goods",
@@ -273,7 +267,7 @@ specified through the options object detailed in the above examples.
 			/////
 		},
 		flash:{
-			swfPath: "ext_apps/BakedGoods.swf",
+			swfPath: "ext_bin/BakedGoods.swf",
 
 			lsoName: "Baked_Goods",
 			lsoPath: null,
@@ -285,10 +279,10 @@ specified through the options object detailed in the above examples.
 			allowScriptAccess: "sameDomain"
 		},
 		silverlight: {
-			xapPath: "ext_apps/bakedGoods.xap",
+			xapPath: "ext_bin/BakedGoods.xap",
 
 			storeScope: "application",
-			conduitClass: "IsolatedStorageSettings",
+			conduitClass: "IsolatedStorageFile",
 
 			directoryPath: "/",
 
@@ -313,16 +307,14 @@ specified through the options object detailed in the above examples.
 			elementParent: document.body,
 			elementStyle: "visibility:none;position:absolute;left:0;top:0;width:1px;height1px;"
 		}
-	}; 
-	
-<br/>
-
-	
-##Advanced
+	};
 
 
-###Storage operation options
+Advanced
+========
 
+Storage operation options
+-------------------------
 BakedGoods defines several storage operation-specific options that can alter the way they're performed:
 
 	var defaultOperationOptionsObj = {
@@ -367,9 +359,8 @@ BakedGoods defines several storage operation-specific options that can alter the
 		}
 	};
 	
-	
-###Database types
-
+Database types
+--------------
 WebSQL and IndexedDB based storage operations can be conducted through the interface just like non-database types.
 This interface uniformity, however, introduces a few differences in the data you supply it.
 
@@ -381,7 +372,7 @@ This interface uniformity, however, introduces a few differences in the data you
 		databaseVersion: "",
 		estimatedDatabaseSize: 1024 * 1024,
 		tableData: {name: "Main", keyColumnName: "lastName", columnDefinitions: "(lastName TEXT PRIMARY KEY, firstName TEXT)"}, 
-		tableIndexDataArray: [name: "First_Name_Index", columnNames: "firstName"]
+		tableIndexDataArray: [name: "First_Name_Index", columnNames: "(firstName)"]
 	};
 	
 	var indexedDBOptionsObj = {
@@ -418,10 +409,8 @@ This interface uniformity, however, introduces a few differences in the data you
 		//... Any omitted object members previously described
 	});
 
-
-
-###Filesystem types
-
+Filesystem types
+----------------
 HTML5 File system and and IsolatedStorage (via IsolatedStorageFile) based storage operations can 
 be conducted through the interface just like non-file system types. Additionally:
 
@@ -429,7 +418,6 @@ be conducted through the interface just like non-file system types. Additionally
 - `get()` and `getAll()` operations can be supplied data format preferences (either for the entire supplied data item set or per data item)
 - `removeAll()` operations can be supplied recursive and directory-inclusion specifications
 
-<br/>
 
     bakedGoods.set({
 	
@@ -441,9 +429,8 @@ be conducted through the interface just like non-file system types. Additionally
 		//... Any omitted object members previously described
 	});
 	
-	
-###Conditional operations
-
+Conditional operations
+----------------------
 Conditional retrieval and removal operations can be performed in storage facilities that 
 support structured data by using `getAll()` or `removeAll()` and supplying a filter expression:
 
@@ -459,9 +446,10 @@ support structured data by using `getAll()` or `removeAll()` and supplying a fil
 	
 		//A String representation of an expression that, when evaluated (read: sanitize if necessary)
 		//using an arbitrary data item, must return true for that item to be subject to the operation.
-		filter: "keyObj > 5 && valueObj.someProperty !== 'someValue'",	//"keyObj" and "valueObj" are keywords reserved in 
-                                                                        //the evaluation environment to refer to the key 
-                                                                        //and value of a data item, respectively
+		filter: "keyObj > 5 && valueObj.someProperty !== 'someValue'",	//"keyObj" and "valueObj" are keywords reserved
+		                                                                    //in the evaluation environment to refer to
+		                                                                    //the key and value of a data item,
+		                                                                    //respectively
 												
 		//Array specifying the faclities the items of interest are located in (the strings in this 
         //specific array denote all the storage types that conditional operations can be conducted on)
@@ -470,9 +458,8 @@ support structured data by using `getAll()` or `removeAll()` and supplying a fil
 		//... Any omitted object members previously described
 	});
 	
-	
-###User-defined storage operation functions
-
+User-defined storage operation functions
+----------------------------------------
 A user-defined function can be supplied for any storage type that is a target of a given operation. The supplied 
 function will be executed instead of the internally-defined one mapped to that storage facility & operation combo:
 
@@ -492,28 +479,30 @@ function will be executed instead of the internally-defined one mapped to that s
 	//dataArray:    Contains the data items to be stored
 	//optionsObj:   Contains the user-defined and/or default storage-type specific options for this operation
 	//complete:     function(processedItemCount, errorObj){} Call when complete.
-					    processedItemCount: # of processed items
-					    errorObj: (optional) the caught, fatal error (if one was spawned)
+	//				    processedItemCount: # of processed items
+	//				    errorObj:           (optional) the caught, fatal error (if one was spawned)
 	function set_customFunction(dataArray, optionsObj, complete){}
 	
 	
-	//dataArray:    Contains the keys of the data items to be retrieved
+	//dataArray:    Contains identifying metadata, and/or objects which contain 
+	//              identifying metadata, of the data items to be retrieved
 	//optionsObj:   Contains the user-defined and/or default storage-type specific options for this operation
 	//complete:     function(processedItemCount, keyValuePairsObj, errorObj){} Call when complete.
-					    processedItemCount: # of processed items
-					    keyValuePairsObj:   object containing pairs each consisting of
-                                            a desired key and the value it keys
-					    errorObj: (optional) the caught, fatal error (if one was spawned)
+	//				    processedItemCount: # of processed items
+	//				    keyValuePairsObj:   object containing pairs each consisting of
+    //                                      a desired key and the value it keys
+	//				    errorObj:           (optional) the caught, fatal error (if one was spawned)
 	function get_customFunction(keyArray, optionsObj, complete){}
 	
 	
-	//dataArray:    Contains the keys of the data items to be removed
+	//dataArray:    Contains identifying metadata, and/or objects which contain 
+	//              identifying metadata, of the data items to be removed
 	//optionsObj:   Contains the user-defined and/or default storage-type specific options for this operation
 	//complete:     function(processedItemCount, removedKeyArray, errorObj){} Call when complete.
-					    processedItemCount: # of processed items
-					    removedKeyArray:    Keys of removed items (must omit from argument list 
-                                            if removeExpirationData is false)
-					    errorObj: (optional) the caught, fatal error (if one was spawned)
+	//				    processedItemCount: # of processed items
+	//				    removedKeyArray:    Keys of removed items (must omit from argument list 
+    //                                      if removeExpirationData is false)
+	//				    errorObj:           (optional) the caught, fatal error (if one was spawned)
 	function remove_customFunction(keyArray, optionsObj, complete){}
 	
 	
@@ -521,9 +510,9 @@ function will be executed instead of the internally-defined one mapped to that s
     //              argument list if facility can't be target of conditional operation (see relevant section))
 	//optionsObj:   Contains the user-defined and/or default storage-type specific options for this operation
 	//complete:     function(processedItemCount, keyValuePairsObj, errorObj){} Call when complete.
-					    processedItemCount: # of processed items
-					    dataItemObjArray: An array of the data items procured (each of the form {key: _, value: _}
-					    errorObj: (optional) the caught, fatal error (if one was spawned)
+	//				    processedItemCount: # of processed items
+	//				    dataItemObjArray:   An array of the data items procured (each of the form {key: _, value: _}
+	//				    errorObj:           (optional) the caught, fatal error (if one was spawned)
 	function getAll_customFunction(exprStr, optionsObj, complete){}
 	
 	
@@ -531,15 +520,14 @@ function will be executed instead of the internally-defined one mapped to that s
     //              argument list if facility can't be target of conditional operation (see relevant section))
 	//optionsObj:   Contains the user-defined and/or default storage-type specific options for this operation
 	//complete:     function(processedItemCount, removedKeyArray, errorObj){} Call when complete.
-					    processedItemCount: # of processed items
-					    removedKeyArray: Keys of removed items (must omit from argument list
-                        if removeExpirationData is false) 
-					    errorObj: (optional) the caught, fatal error (if one was spawned)
+	//				    processedItemCount: # of processed items
+	//				    removedKeyArray:    Keys of removed items (must omit from argument list
+    //                                      if removeExpirationData is false) 
+	//				    errorObj:           (optional) the caught, fatal error (if one was spawned)
 	function removeAll_customFunction(exprStr, optionsObj, complete){}
 	
-	
-###User defined storage facilities
-
+User defined storage facilities
+-------------------------------
 User-defined storage facilities names can be supplied to the storage operation interface methods. 
 A user-defined function for that type can then be supplied to perform an operation on the named type. 
 
@@ -564,10 +552,10 @@ This can be used to perform tricks that result in cleaner code:
 			}
 		}
 	});
-    
-<br />
 
-##Repo contents
+    
+Repo contents
+=============
 - **bakedGoods.js**: Main code file. Include it as a `<script>` reference in target HTML file(s)
 - **ext_bin**: Contains binary files necessary to access the storage facilities made available by supported external plugins. To conduct a storage operation on an external storage facility:
     - Place the file in found in **ext** that is associated with the target storage facility on to your server
@@ -576,8 +564,9 @@ This can be used to perform tricks that result in cleaner code:
 - **js_test**: Contains test-related files
 - **index.html**: An HTML file referencing the test files in **js_test** (simply uncomment the reference to the desired  test and load the page to run it)
 
-##Licensing and usage information
 
+Licensing and usage information
+===============================
 BakedGoods is licensed under the GNU General Public License (version 3). Licensing for proprietary software is available at a cost, inquire for more details. 
 
 Informally, It'd be great to be notified of any derivatives or forks (or even better, issues or refactoring points that may inspire one)!

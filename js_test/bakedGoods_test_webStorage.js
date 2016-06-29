@@ -1,3 +1,11 @@
+/*
+ * The test runners in this file should be executed independant of one another (in other words, 
+ * only one runner should be un-commented at any given time) in order to ensure that data produced
+ * and/or modified by one does not affect the execution of any other.
+ */
+
+
+
 /**
 * Carries out a storage operation on a web storage facility.
 
@@ -333,7 +341,7 @@ function clear (webStorageType)
 }
 	
 /*        
-//webStorage_executeStorageOperation testRunner
+//webStorage_executeStorageOperation test runner
 (function(){
     
     for(var i = 0; i < webStorageTypeCount; i++)
@@ -426,7 +434,7 @@ function clear (webStorageType)
         }
     }
 })(198)
-*/	
+*/
 	
         
         
@@ -485,7 +493,7 @@ function clear (webStorageType)
         }
     }
 })(198)
-*/	
+*/
 	
 /*
 //webStorage_remove test runner
